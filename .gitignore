@@ -1,0 +1,44 @@
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Dados do banco — dumps com informação financeira real, nunca no repositório
+backups/
+*.sql
+*.sql.gz
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backend/instance/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / SO
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Importação única com o histórico financeiro real — fica só na máquina
+backend/import_planilha.py
+
+# Anotações pessoais
+notas

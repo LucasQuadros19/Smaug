@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: saldos-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: saldos
+      POSTGRES_PASSWORD: saldos
+      POSTGRES_DB: saldos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saldos -d saldos"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Dump periódico para ./backups na sua máquina, com descarte automático dos
+  # antigos. Sobe junto com `docker compose up -d` — nada de cron para lembrar.
+  backup:
+    image: postgres:16-alpine
+    container_name: saldos-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: saldos
+      PGPASSWORD: saldos
+      PGDATABASE: saldos
+      BACKUP_DIR: /backups
+      RETENTION_DAYS: 14
+      # A cada 6 horas. Um dia = 86400.
+      INTERVAL_SECONDS: 21600
+    volumes:
+      - ./backups:/backups
+      - ./backend/scripts/backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo "Backups a cada $${INTERVAL_SECONDS}s, guardando $${RETENTION_DAYS} dias."
+        while true; do
+          sh /usr/local/bin/backup.sh || echo "backup falhou, tentando de novo no próximo ciclo"
+          sleep "$${INTERVAL_SECONDS}"
+        done
+
+volumes:
+  pgdata:
