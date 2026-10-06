@@ -29,7 +29,7 @@ def test_automatica_adiada_so_gera_na_nova_data(client, recorrente):
     adiada = client.post(f"/api/recurring/{item.id}/postpone", json={"until": (hoje + timedelta(days=5)).isoformat()})
     assert adiada.status_code == 200, adiada.get_data(as_text=True)
 
-    assert client.post("/api/recurring/generate").get_json()["generated"] == 0
+    assert client.post("/api/recurring/generate", json={}).get_json()["generated"] == 0
 
 
 def test_ao_gerar_adiada_volta_ao_calendario_normal(client, db, recorrente):
@@ -39,7 +39,7 @@ def test_ao_gerar_adiada_volta_ao_calendario_normal(client, db, recorrente):
     adiamento = hoje - timedelta(days=2)  # adiada para uma data que também já chegou
     client.post(f"/api/recurring/{item.id}/postpone", json={"until": adiamento.isoformat()})
 
-    client.post("/api/recurring/generate")
+    client.post("/api/recurring/generate", json={})
 
     tx = Transaction.query.order_by(Transaction.date).first()
     assert tx.date == adiamento

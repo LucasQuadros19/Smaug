@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, request
@@ -6,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models.loan import LOAN_STATUSES, Loan, LoanParticipant, LoanRepayment
+from app.utils.parse import iso_date, money
 
 loans_bp = Blueprint("loans", __name__)
 
@@ -15,6 +15,17 @@ def _today():
     from datetime import date
 
     return date.today()
+
+
+def _invalid_commission(value):
+    """0 a 100, ou vazio."""
+    if value in (None, ""):
+        return None
+    try:
+        rate = Decimal(str(value))
+    except InvalidOperation:
+        return "commission_rate inválido"
+    return None if 0 <= rate <= 100 else "commission_rate deve estar entre 0 e 100"
 
 
 def _replace_participants(loan, raw_participants):
@@ -27,8 +38,8 @@ def _replace_participants(loan, raw_participants):
         loan.participants.append(
             LoanParticipant(
                 name=name,
-                contributed=raw.get("contributed") or 0,
-                to_receive=raw.get("to_receive") or 0,
+                contributed=money(raw.get("contributed"), "contributed", allow_zero=True, required=False) or 0,
+                to_receive=money(raw.get("to_receive"), "to_receive", allow_zero=True, required=False) or 0,
                 is_me=bool(raw.get("is_me")),
             )
         )
@@ -61,13 +72,17 @@ def create_loan():
     status = data.get("status", "active")
     if status not in LOAN_STATUSES:
         return jsonify({"error": f"status deve ser um de {LOAN_STATUSES}"}), 400
+    erro = _invalid_commission(data.get("commission_rate"))
+    if erro:
+        return jsonify({"error": erro}), 400
 
     loan = Loan(
         borrower=borrower,
-        amount=data.get("amount") or 0,
-        interest_rate=data.get("interest_rate"),
-        start_date=date.fromisoformat(start_date),
-        due_date=date.fromisoformat(data["due_date"]) if data.get("due_date") else None,
+        amount=money(data.get("amount"), "amount", allow_zero=True, required=False) or 0,
+        interest_rate=money(data.get("interest_rate"), "interest_rate", allow_zero=True, required=False),
+        commission_rate=data.get("commission_rate"),
+        start_date=iso_date(start_date, "start_date"),
+        due_date=iso_date(data.get("due_date"), "due_date", required=False),
         status=status,
         notes=(data.get("notes") or "").strip() or None,
     )
@@ -79,7 +94,7 @@ def create_loan():
 
 @loans_bp.put("/<int:loan_id>")
 def update_loan(loan_id):
-    loan = Loan.query.get_or_404(loan_id)
+    loan = db.get_or_404(Loan, loan_id)
     data = request.get_json(silent=True) or {}
 
     if "borrower" in data:
@@ -88,13 +103,18 @@ def update_loan(loan_id):
             return jsonify({"error": "O campo 'borrower' não pode ser vazio"}), 400
         loan.borrower = borrower
     if "amount" in data:
-        loan.amount = data["amount"] or 0
+        loan.amount = money(data["amount"], "amount", allow_zero=True, required=False) or 0
     if "interest_rate" in data:
-        loan.interest_rate = data["interest_rate"]
+        loan.interest_rate = money(data["interest_rate"], "interest_rate", allow_zero=True, required=False)
+    if "commission_rate" in data:
+        erro = _invalid_commission(data["commission_rate"])
+        if erro:
+            return jsonify({"error": erro}), 400
+        loan.commission_rate = data["commission_rate"] if data["commission_rate"] != "" else None
     if "start_date" in data:
-        loan.start_date = date.fromisoformat(data["start_date"])
+        loan.start_date = iso_date(data["start_date"], "start_date")
     if "due_date" in data:
-        loan.due_date = date.fromisoformat(data["due_date"]) if data["due_date"] else None
+        loan.due_date = iso_date(data["due_date"], "due_date", required=False)
     if "status" in data:
         if data["status"] not in LOAN_STATUSES:
             return jsonify({"error": f"status deve ser um de {LOAN_STATUSES}"}), 400
@@ -140,22 +160,14 @@ def _register_repayment(loan, data):
     from app.models.account import Account
     from app.models.transaction import Transaction
 
-    account = Account.query.get(data.get("account_id"))
+    account = db.session.get(Account, data.get("account_id"))
     if not account:
         return None, ("Informe a conta que recebeu o dinheiro", 400)
 
-    try:
-        amount = Decimal(str(data.get("amount") or 0))
-        raw_mine = data.get("my_share")
-        my_share = amount if raw_mine is None else Decimal(str(raw_mine))
-        partners_share = Decimal(str(data.get("partners_share") or 0))
-    except (InvalidOperation, TypeError):
-        return None, ("Valores inválidos", 400)
-
-    if amount <= 0:
-        return None, ("O valor recebido deve ser maior que zero", 400)
-    if my_share < 0 or partners_share < 0:
-        return None, ("As partes não podem ser negativas", 400)
+    amount = money(data.get("amount"), "O valor recebido")
+    raw_mine = data.get("my_share")
+    my_share = amount if raw_mine is None else money(raw_mine, "my_share", allow_zero=True)
+    partners_share = money(data.get("partners_share"), "partners_share", allow_zero=True, required=False) or Decimal(0)
     if my_share + partners_share > amount:
         return None, ("A soma das partes não pode passar do valor recebido", 400)
 
@@ -163,7 +175,7 @@ def _register_repayment(loan, data):
 
     repayment = LoanRepayment(
         loan_id=loan.id,
-        date=date.fromisoformat(data["date"]) if data.get("date") else _today(),
+        date=iso_date(data.get("date"), "date", required=False) or _today(),
         amount=amount,
         my_share=my_share,
         partners_share=partners_share,
@@ -196,7 +208,7 @@ def _register_repayment(loan, data):
         repayment.partner_transaction_id = saida.id
 
     # Quitou tudo o que era meu? Fecha o empréstimo.
-    if loan.my_outstanding <= 0:
+    if loan.mine_is_back:
         loan.status = "paid"
 
     db.session.commit()
@@ -211,7 +223,7 @@ def create_repayment(loan_id):
     `partners_share` a dos sócios. Enquanto o repasse não é feito, a parte
     deles fica no caixa mas não conta como patrimônio meu.
     """
-    loan = Loan.query.get_or_404(loan_id)
+    loan = db.get_or_404(Loan, loan_id)
     result, error = _register_repayment(loan, request.get_json(silent=True) or {})
     if error:
         db.session.rollback()
@@ -222,7 +234,7 @@ def create_repayment(loan_id):
 @loans_bp.post("/<int:loan_id>/repayments/<int:repayment_id>/settle-partners")
 def settle_partners(loan_id, repayment_id):
     """Marca que o dinheiro dos sócios foi repassado e tira do caixa."""
-    loan = Loan.query.get_or_404(loan_id)
+    loan = db.get_or_404(Loan, loan_id)
     repayment = LoanRepayment.query.filter_by(id=repayment_id, loan_id=loan.id).first_or_404()
 
     if repayment.partners_settled:
@@ -255,17 +267,20 @@ def _drop_repayment_transactions(repayment):
     """
     from app.models.transaction import Transaction
 
-    for tx_id in (repayment.transaction_id, repayment.partner_transaction_id):
-        if tx_id:
-            transaction = Transaction.query.get(tx_id)
-            if transaction:
-                db.session.delete(transaction)
+    tx_ids = [tx_id for tx_id in (repayment.transaction_id, repayment.partner_transaction_id) if tx_id]
+    # Solta a referência antes: apagar o lançamento ainda apontado quebra a chave estrangeira.
+    repayment.transaction_id = repayment.partner_transaction_id = None
+    db.session.flush()
+    for tx_id in tx_ids:
+        transaction = db.session.get(Transaction, tx_id)
+        if transaction:
+            db.session.delete(transaction)
 
 
 @loans_bp.delete("/<int:loan_id>/repayments/<int:repayment_id>")
 def delete_repayment(loan_id, repayment_id):
     """Desfaz um recebimento, apagando junto os lançamentos que ele gerou."""
-    loan = Loan.query.get_or_404(loan_id)
+    loan = db.get_or_404(Loan, loan_id)
     repayment = LoanRepayment.query.filter_by(id=repayment_id, loan_id=loan.id).first_or_404()
 
     _drop_repayment_transactions(repayment)
@@ -273,7 +288,7 @@ def delete_repayment(loan_id, repayment_id):
     db.session.flush()
 
     # Reabre o empréstimo se voltou a ter saldo.
-    if loan.status == "paid" and loan.my_outstanding > 0:
+    if loan.status == "paid" and not loan.mine_is_back:
         loan.status = "active"
 
     db.session.commit()
@@ -283,7 +298,7 @@ def delete_repayment(loan_id, repayment_id):
 @loans_bp.delete("/<int:loan_id>")
 def delete_loan(loan_id):
     """Apaga o empréstimo e desfaz tudo que ele moveu no caixa."""
-    loan = Loan.query.get_or_404(loan_id)
+    loan = db.get_or_404(Loan, loan_id)
     for repayment in loan.repayments:
         _drop_repayment_transactions(repayment)
     db.session.delete(loan)

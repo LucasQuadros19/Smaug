@@ -29,9 +29,14 @@ export function RepaymentForm({
   const [notes, setNotes] = useState("")
 
   const hasPartners = loan.participants.some((p) => !p.is_me)
-  // Proporção da minha parte no empréstimo, só como sugestão ao digitar.
+  // Proporção do que eu recebo (inclui comissão), só como sugestão ao digitar.
+  // Sem "recebe" preenchido, cai na proporção do que cada um colocou.
   const myRatio =
-    loan.total_contributed > 0 ? (loan.my_contributed ?? 0) / loan.total_contributed : 1
+    loan.total_to_receive > 0
+      ? (loan.my_to_receive ?? 0) / loan.total_to_receive
+      : loan.total_contributed > 0
+        ? (loan.my_contributed ?? 0) / loan.total_contributed
+        : 1
 
   const total = Number(amount) || 0
   const mine = Number(myShare) || 0

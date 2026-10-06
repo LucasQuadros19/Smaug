@@ -1,11 +1,11 @@
 import { Bot, CalendarClock, Hand, Pencil, PlayCircle, Trash2 } from "lucide-react"
-import { formatCurrency, formatDate } from "../../lib/format"
+import { formatCurrency, formatDate, todayISO } from "../../lib/format"
 import { FREQUENCY_LABELS } from "../../lib/constants"
 import type { RecurringTransaction } from "../../types"
 
 /** Vencida ou vencendo hoje — comparação por string ISO, que já ordena certo. */
 function estaVencida(item: RecurringTransaction) {
-  return item.due_date <= new Date().toISOString().slice(0, 10)
+  return item.due_date <= todayISO()
 }
 
 export function RecurringRow({

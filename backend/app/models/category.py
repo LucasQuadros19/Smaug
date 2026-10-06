@@ -1,6 +1,5 @@
-from datetime import datetime
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 CATEGORY_TYPES = ("income", "expense")
 
@@ -13,7 +12,7 @@ class Category(db.Model):
     type = db.Column(db.String(20), nullable=False)
     color = db.Column(db.String(20), nullable=False, default="#6366f1")
     icon = db.Column(db.String(10), nullable=False, default="💰")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     transactions = db.relationship("Transaction", backref="category")
     budgets = db.relationship(

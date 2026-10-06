@@ -9,6 +9,7 @@ from app.models.account import Account
 from app.models.category import Category
 from app.models.transaction import TRANSACTION_TYPES, Transaction
 from app.utils.pagination import paginate
+from app.utils.parse import iso_date, money
 
 transactions_bp = Blueprint("transactions", __name__)
 
@@ -123,20 +124,15 @@ def create_transaction():
         return jsonify({"error": "O campo 'description' é obrigatório"}), 400
 
     account_id = data.get("account_id")
-    if not account_id or not Account.query.get(account_id):
+    if not account_id or not db.session.get(Account, account_id):
         return jsonify({"error": "account_id inválido"}), 400
 
     tx_type = data.get("type")
     if tx_type not in TRANSACTION_TYPES:
         return jsonify({"error": f"type deve ser um de {TRANSACTION_TYPES}"}), 400
 
-    amount = data.get("amount")
-    if amount is None or float(amount) <= 0:
-        return jsonify({"error": "amount deve ser maior que zero"}), 400
-
-    date_value = data.get("date")
-    if not date_value:
-        return jsonify({"error": "O campo 'date' é obrigatório (YYYY-MM-DD)"}), 400
+    amount = money(data.get("amount"), "amount")
+    when = iso_date(data.get("date"), "date")
 
     transaction = Transaction(
         description=description,
@@ -145,7 +141,7 @@ def create_transaction():
         playlist_id=data.get("playlist_id"),
         amount=amount,
         type=tx_type,
-        date=date.fromisoformat(date_value),
+        date=when,
         notes=data.get("notes"),
     )
     db.session.add(transaction)
@@ -155,7 +151,7 @@ def create_transaction():
 
 @transactions_bp.put("/<int:transaction_id>")
 def update_transaction(transaction_id):
-    transaction = Transaction.query.get_or_404(transaction_id)
+    transaction = db.get_or_404(Transaction, transaction_id)
     data = request.get_json(silent=True) or {}
 
     if "description" in data:
@@ -164,7 +160,7 @@ def update_transaction(transaction_id):
             return jsonify({"error": "O campo 'description' não pode ser vazio"}), 400
         transaction.description = description
     if "account_id" in data:
-        if not Account.query.get(data["account_id"]):
+        if not db.session.get(Account, data["account_id"]):
             return jsonify({"error": "account_id inválido"}), 400
         transaction.account_id = data["account_id"]
     if "category_id" in data:
@@ -176,11 +172,9 @@ def update_transaction(transaction_id):
             return jsonify({"error": f"type deve ser um de {TRANSACTION_TYPES}"}), 400
         transaction.type = data["type"]
     if "amount" in data:
-        if float(data["amount"]) <= 0:
-            return jsonify({"error": "amount deve ser maior que zero"}), 400
-        transaction.amount = data["amount"]
+        transaction.amount = money(data["amount"], "amount")
     if "date" in data:
-        transaction.date = date.fromisoformat(data["date"])
+        transaction.date = iso_date(data["date"], "date")
     if "notes" in data:
         transaction.notes = data["notes"]
 
@@ -192,7 +186,7 @@ def update_transaction(transaction_id):
 def delete_transaction(transaction_id):
     from app.models.loan import LoanRepayment
 
-    transaction = Transaction.query.get_or_404(transaction_id)
+    transaction = db.get_or_404(Transaction, transaction_id)
 
     # Lançamentos gerados por um recebimento de empréstimo não podem ser
     # apagados soltos: o dinheiro sairia do caixa mas o recebimento continuaria
@@ -210,6 +204,11 @@ def delete_transaction(transaction_id):
                 )
             }
         ), 400
+
+    from app.models.market import MarketTrade
+
+    if MarketTrade.query.filter_by(transaction_id=transaction_id).first():
+        return jsonify({"error": "Esse lançamento veio de uma compra ou venda no Mercado. Apague por lá."}), 400
 
     db.session.delete(transaction)
     db.session.commit()

@@ -7,6 +7,9 @@ import {
   Repeat,
   FolderKanban,
   Target,
+  Calculator,
+  CandlestickChart,
+  Bot,
   Landmark,
   ShoppingCart,
   Table2,
@@ -41,6 +44,8 @@ const sections = [
       { to: "/ativos", label: "Ativos", icon: Landmark },
       { to: "/emprestimos", label: "Empréstimos", icon: HandCoins },
       { to: "/metas", label: "Metas", icon: Target },
+      { to: "/mercado", label: "Mercado", icon: CandlestickChart },
+      { to: "/bot", label: "Bot", icon: Bot },
     ],
   },
   {
@@ -49,6 +54,7 @@ const sections = [
       { to: "/grupos", label: "Grupos", icon: FolderKanban },
       { to: "/contas", label: "Contas", icon: Wallet },
       { to: "/categorias", label: "Categorias", icon: Tags },
+      { to: "/calculos", label: "Cálculos", icon: Calculator },
     ],
   },
 ]

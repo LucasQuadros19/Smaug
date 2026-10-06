@@ -1,6 +1,5 @@
-from datetime import datetime
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 ACCOUNT_TYPES = ("checking", "savings", "credit_card", "cash", "investment")
 
@@ -13,7 +12,7 @@ class Account(db.Model):
     type = db.Column(db.String(20), nullable=False, default="checking")
     initial_balance = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     color = db.Column(db.String(20), nullable=False, default="#6366f1")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     transactions = db.relationship(
         "Transaction", backref="account", cascade="all, delete-orphan"

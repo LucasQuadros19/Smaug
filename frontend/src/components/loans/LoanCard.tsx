@@ -41,14 +41,23 @@ export function LoanCard({
   const isDark = theme === "dark"
   const status = STATUS[loan.status]
 
-  // A barra usa o somado dos participantes como base, para o desenho refletir
-  // exatamente o que foi digitado (mesmo que não feche com o total).
-  const base = loan.total_contributed || loan.amount || 1
-  const shares = loan.participants.map((participant, index) => ({
-    ...participant,
-    color: participant.is_me ? seriesColor(0, isDark) : seriesColor(index + 1, isDark),
-    percent: (participant.contributed / base) * 100,
-  }))
+  // A barra mostra quem RECEBE o quê (0–100% do que volta). Sem "recebe"
+  // preenchido, cai no que cada um colocou. A comissão vira uma fatia própria,
+  // tirada de dentro da minha parte.
+  const byReceive = loan.total_to_receive > 0
+  const base = (byReceive ? loan.total_to_receive : loan.total_contributed || loan.amount) || 1
+  const commissionColor = "#f59e0b"
+  const shares = loan.participants.flatMap((participant, index) => {
+    const color = participant.is_me ? seriesColor(0, isDark) : seriesColor(index + 1, isDark)
+    const value = byReceive ? participant.to_receive : participant.contributed
+    const commission = participant.is_me && byReceive ? Math.min(loan.commission, value) : 0
+    const own = { ...participant, label: participant.name, color, value: value - commission, isCommission: false }
+    if (commission <= 0) return [own]
+    const commissionShare = { ...participant, label: "Comissão", color: commissionColor, value: commission, isCommission: true }
+    // Entrei com zero: minha parte é só a comissão, sem linha vazia "R$ 0 → R$ 0".
+    return own.value <= 0 && participant.contributed <= 0 ? [commissionShare] : [own, commissionShare]
+  })
+  const percentOf = (value: number) => (value / base) * 100
 
   return (
     <Card className="flex flex-col gap-4">
@@ -115,6 +124,22 @@ export function LoanCard({
             </p>
           </div>
         )}
+        {loan.profit > 0 && (
+          <div>
+            <p className="text-xs text-slate-400">Lucro</p>
+            <p className="text-lg font-medium text-slate-700 dark:text-slate-200">
+              {formatCurrency(loan.profit)}
+            </p>
+          </div>
+        )}
+        {loan.commission > 0 && (
+          <div>
+            <p className="text-xs text-slate-400">Minha comissão ({loan.commission_rate}%)</p>
+            <p className="text-lg font-medium text-amber-600 dark:text-amber-400">
+              {formatCurrency(loan.commission)}
+            </p>
+          </div>
+        )}
         {loan.my_to_receive != null && (
           <div>
             <p className="text-xs text-slate-400">Eu recebo</p>
@@ -127,12 +152,17 @@ export function LoanCard({
 
       {shares.length > 0 && (
         <div>
-          {/* Barra de divisão: cada pedaço é uma pessoa, com folga de 2px. */}
-          <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/5">
+          <div className="mb-1.5 flex justify-between text-[11px] text-slate-400">
+            <span>{byReceive ? "Quem recebe o quê" : "Quem entrou com quanto"}</span>
+            <span>0 – 100%</span>
+          </div>
+          {/* Barra de divisão: cada pedaço é uma pessoa (ou a comissão), com folga de 2px. */}
+          <div className="flex h-3 gap-0.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/5">
             {shares.map((share, index) => (
               <div
                 key={index}
-                style={{ width: `${Math.max(share.percent, 2)}%`, backgroundColor: share.color }}
+                title={`${share.label}: ${Math.round(percentOf(share.value))}%`}
+                style={{ width: `${Math.max(percentOf(share.value), 2)}%`, backgroundColor: share.color }}
                 className="first:rounded-l-full last:rounded-r-full"
                 aria-hidden
               />
@@ -159,19 +189,25 @@ export function LoanCard({
                         : "text-slate-600 dark:text-slate-300"
                     )}
                   >
-                    {share.name}
+                    {share.isCommission ? `Comissão (${share.name})` : share.label}
                   </span>
                   <span className="shrink-0 text-xs text-slate-400">
-                    {Math.round(share.percent)}%
+                    {Math.round(percentOf(share.value))}%
                   </span>
                 </span>
-                <span className="shrink-0 text-slate-500 dark:text-slate-400">
-                  {formatCurrency(share.contributed)}
-                  <span className="mx-1.5 text-slate-300 dark:text-slate-600">→</span>
-                  <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                    {formatCurrency(share.to_receive)}
+                {share.isCommission ? (
+                  <span className="shrink-0 font-medium text-amber-600 dark:text-amber-400">
+                    {formatCurrency(share.value)}
                   </span>
-                </span>
+                ) : (
+                  <span className="shrink-0 text-slate-500 dark:text-slate-400">
+                    {formatCurrency(share.contributed)}
+                    <span className="mx-1.5 text-slate-300 dark:text-slate-600">→</span>
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(byReceive ? share.value : share.to_receive)}
+                    </span>
+                  </span>
+                )}
               </li>
             ))}
           </ul>

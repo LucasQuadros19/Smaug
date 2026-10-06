@@ -1,7 +1,6 @@
-from datetime import datetime
 from decimal import Decimal
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 PLAYLIST_KINDS = ("group", "asset")
 
@@ -53,7 +52,7 @@ class Playlist(db.Model):
     asset_type = db.Column(
         db.String(20), nullable=False, default=DEFAULT_ASSET_TYPE, server_default=DEFAULT_ASSET_TYPE
     )
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     transactions = db.relationship("Transaction", backref="playlist")
     recurring_transactions = db.relationship("RecurringTransaction", backref="playlist")

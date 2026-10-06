@@ -1,12 +1,14 @@
 from datetime import date
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy.orm import selectinload
 
 from app.extensions import db
 from app.models.account import Account
 from app.models.playlist import Playlist
 from app.models.playlist_expectation import PlaylistExpectation
 from app.models.transaction import Transaction
+from app.utils.parse import iso_date, money
 
 expectations_bp = Blueprint("expectations", __name__)
 
@@ -25,7 +27,7 @@ def _with_playlist(item):
 
 @expectations_bp.get("")
 def list_expectations():
-    query = PlaylistExpectation.query
+    query = PlaylistExpectation.query.options(selectinload(PlaylistExpectation.playlist))
 
     playlist_id = request.args.get("playlist_id", type=int)
     if playlist_id:
@@ -44,30 +46,25 @@ def create_expectation():
     data = request.get_json(silent=True) or {}
 
     playlist_id = data.get("playlist_id")
-    if not playlist_id or not Playlist.query.get(playlist_id):
+    if not playlist_id or not db.session.get(Playlist, playlist_id):
         return jsonify({"error": "playlist_id inválido"}), 400
 
     description = (data.get("description") or "").strip()
     if not description:
         return jsonify({"error": "O campo 'description' é obrigatório"}), 400
 
-    amount = data.get("amount")
-    if amount is None or float(amount) <= 0:
-        return jsonify({"error": "amount deve ser maior que zero"}), 400
-
-    expected_date = data.get("expected_date")
-    if not expected_date:
-        return jsonify({"error": "O campo 'expected_date' é obrigatório (YYYY-MM-DD)"}), 400
+    amount = money(data.get("amount"), "amount")
+    expected_date = iso_date(data.get("expected_date"), "expected_date")
 
     account_id = data.get("account_id")
-    if account_id and not Account.query.get(account_id):
+    if account_id and not db.session.get(Account, account_id):
         return jsonify({"error": "account_id inválido"}), 400
 
     item = PlaylistExpectation(
         playlist_id=playlist_id,
         description=description,
         amount=amount,
-        expected_date=date.fromisoformat(expected_date),
+        expected_date=expected_date,
         account_id=account_id,
     )
     db.session.add(item)
@@ -77,7 +74,7 @@ def create_expectation():
 
 @expectations_bp.put("/<int:item_id>")
 def update_expectation(item_id):
-    item = PlaylistExpectation.query.get_or_404(item_id)
+    item = db.get_or_404(PlaylistExpectation, item_id)
     data = request.get_json(silent=True) or {}
 
     if "description" in data:
@@ -86,13 +83,11 @@ def update_expectation(item_id):
             return jsonify({"error": "O campo 'description' não pode ser vazio"}), 400
         item.description = description
     if "amount" in data:
-        if float(data["amount"]) <= 0:
-            return jsonify({"error": "amount deve ser maior que zero"}), 400
-        item.amount = data["amount"]
+        item.amount = money(data["amount"], "amount")
     if "expected_date" in data:
-        item.expected_date = date.fromisoformat(data["expected_date"])
+        item.expected_date = iso_date(data["expected_date"], "expected_date")
     if "account_id" in data:
-        if data["account_id"] and not Account.query.get(data["account_id"]):
+        if data["account_id"] and not db.session.get(Account, data["account_id"]):
             return jsonify({"error": "account_id inválido"}), 400
         item.account_id = data["account_id"]
 
@@ -102,7 +97,7 @@ def update_expectation(item_id):
 
 @expectations_bp.delete("/<int:item_id>")
 def delete_expectation(item_id):
-    item = PlaylistExpectation.query.get_or_404(item_id)
+    item = db.get_or_404(PlaylistExpectation, item_id)
     db.session.delete(item)
     db.session.commit()
     return "", 204
@@ -113,19 +108,15 @@ def launch_expectation(item_id):
     """Lança uma transação real a partir da expectativa. Pode ser chamado
     quantas vezes for preciso — a expectativa continua ali, pronta para o
     próximo lançamento (ex: mesma parcela todo mês)."""
-    item = PlaylistExpectation.query.get_or_404(item_id)
+    item = db.get_or_404(PlaylistExpectation, item_id)
     data = request.get_json(silent=True) or {}
 
     account_id = data.get("account_id") or item.account_id
-    if not account_id or not Account.query.get(account_id):
+    if not account_id or not db.session.get(Account, account_id):
         return jsonify({"error": "account_id inválido"}), 400
 
-    amount = data.get("amount", item.amount)
-    if float(amount) <= 0:
-        return jsonify({"error": "amount deve ser maior que zero"}), 400
-
-    date_value = data.get("date")
-    tx_date = date.fromisoformat(date_value) if date_value else date.today()
+    amount = money(data.get("amount", item.amount), "amount")
+    tx_date = iso_date(data.get("date"), "date", required=False) or date.today()
 
     transaction = Transaction(
         account_id=account_id,

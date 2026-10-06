@@ -1,5 +1,5 @@
 from datetime import date as date_cls
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import case, func
@@ -11,6 +11,7 @@ from app.models.account import Account
 from app.models.playlist import Playlist
 from app.models.snapshot import Snapshot, SnapshotEntry
 from app.models.transaction import Transaction
+from app.utils.parse import iso_date, money
 
 snapshots_bp = Blueprint("snapshots", __name__)
 
@@ -41,17 +42,16 @@ def _create_snapshot(payload):
 
     Retorna (dict, None) em caso de sucesso ou (None, (mensagem, status)).
     """
-    date_value = payload.get("date")
-    if not date_value:
-        return None, ("O campo 'date' é obrigatório (YYYY-MM-DD)", 400)
+    when = payload.get("date")
+    when = when if isinstance(when, date_cls) else iso_date(when, "date")
 
     entries = payload.get("entries")
     if not isinstance(entries, list) or not entries:
         return None, ("É preciso informar ao menos uma posição em 'entries'", 400)
 
     snapshot = Snapshot(
-        date=date_cls.fromisoformat(date_value) if isinstance(date_value, str) else date_value,
-        inflow=payload.get("inflow") or 0,
+        date=when,
+        inflow=money(payload.get("inflow"), "inflow", allow_negative=True, required=False) or 0,
         notes=(payload.get("notes") or "").strip() or None if payload.get("notes") else None,
     )
     db.session.add(snapshot)
@@ -60,13 +60,13 @@ def _create_snapshot(payload):
     moved = _moved_by_account()
 
     for raw in entries:
-        value = Decimal(str(raw.get("value") or 0))
+        value = money(raw.get("value"), "value", allow_negative=True, required=False) or Decimal(0)
         native_value = None
         playlist_id = raw.get("playlist_id")
         account_id = raw.get("account_id")
 
         if playlist_id:
-            playlist = Playlist.query.get(playlist_id)
+            playlist = db.session.get(Playlist, playlist_id)
             if not playlist:
                 db.session.rollback()
                 return None, (f"playlist_id {playlist_id} inválido", 400)
@@ -84,7 +84,7 @@ def _create_snapshot(payload):
             if not playlist.auto_source:
                 playlist.opening_value = native_value if native_value is not None else value
         elif account_id:
-            account = Account.query.get(account_id)
+            account = db.session.get(Account, account_id)
             if not account:
                 db.session.rollback()
                 return None, (f"account_id {account_id} inválido", 400)
@@ -136,12 +136,7 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
     """
     from app.services.balance_service import get_balances_by_account
 
-    try:
-        amount = Decimal(str(raw_amount or 0))
-    except (InvalidOperation, TypeError):
-        return jsonify({"error": "amount inválido"}), 400
-    if amount <= 0:
-        return jsonify({"error": "amount deve ser maior que zero"}), 400
+    amount = money(raw_amount, "amount")
 
     if not origin or not target:
         return jsonify({"error": "Informe 'from' e 'to' como {type, id}"}), 400
@@ -232,7 +227,7 @@ def settle():
     if not origin or origin.get("type") != "playlist":
         return jsonify({"error": "Informe 'from' como {type:'playlist', id}"}), 400
 
-    playlist = Playlist.query.get(origin.get("id"))
+    playlist = db.session.get(Playlist, origin.get("id"))
     if not playlist:
         return jsonify({"error": "posição não encontrada"}), 400
     if playlist.auto_source:
@@ -240,7 +235,7 @@ def settle():
             {"error": "Essa posição vem de outra tela — quite por lá (ex: Empréstimos)"}
         ), 400
 
-    account = Account.query.get(data.get("to_account_id"))
+    account = db.session.get(Account, data.get("to_account_id"))
     if not account:
         return jsonify({"error": "Informe a conta que recebeu o dinheiro"}), 400
 
@@ -248,18 +243,12 @@ def settle():
     if rate is None:
         return jsonify({"error": f"Sem cotação de {playlist.currency} ainda — confira a internet"}), 400
 
-    try:
-        received = Decimal(str(data.get("received") or 0))
-        # Tudo em reais aqui; a posição guarda na moeda dela.
-        current = (Decimal(playlist.opening_value or 0) * rate).quantize(Decimal("0.01"))
-        raw_reduce = data.get("reduce_by")
-        # Sem 'reduce_by' é baixa total da posição.
-        reduce_by = current if raw_reduce is None else Decimal(str(raw_reduce))
-    except Exception:
-        return jsonify({"error": "valores inválidos"}), 400
-
-    if received <= 0:
-        return jsonify({"error": "received deve ser maior que zero"}), 400
+    received = money(data.get("received"), "received")
+    # Tudo em reais aqui; a posição guarda na moeda dela.
+    current = (Decimal(playlist.opening_value or 0) * rate).quantize(Decimal("0.01"))
+    raw_reduce = data.get("reduce_by")
+    # Sem 'reduce_by' é baixa total da posição.
+    reduce_by = current if raw_reduce is None else money(raw_reduce, "reduce_by")
     if reduce_by <= 0:
         return jsonify({"error": "reduce_by deve ser maior que zero"}), 400
     # Baixar mais do que a posição tem viraria dívida fantasma.
@@ -310,7 +299,7 @@ def invest():
     """
     data = request.get_json(silent=True) or {}
 
-    playlist = Playlist.query.get((data.get("to") or {}).get("id"))
+    playlist = db.session.get(Playlist, (data.get("to") or {}).get("id"))
     if not playlist:
         return jsonify({"error": "Informe a posição em 'to' como {type:'playlist', id}"}), 400
     if playlist.auto_source:
@@ -330,7 +319,7 @@ def invest():
 @snapshots_bp.delete("/<int:snapshot_id>")
 def delete_snapshot(snapshot_id):
     """Remove só o registro histórico — não mexe no estado atual."""
-    snapshot = Snapshot.query.get_or_404(snapshot_id)
+    snapshot = db.get_or_404(Snapshot, snapshot_id)
     db.session.delete(snapshot)
     db.session.commit()
     return "", 204

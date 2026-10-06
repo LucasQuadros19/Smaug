@@ -1,6 +1,5 @@
-from datetime import datetime
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 
 class Snapshot(db.Model):
@@ -14,7 +13,7 @@ class Snapshot(db.Model):
     # entra em nenhuma soma — o uso dela na planilha era inconsistente.
     inflow = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     notes = db.Column(db.String(300), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     entries = db.relationship(
         "SnapshotEntry", backref="snapshot", cascade="all, delete-orphan"

@@ -142,7 +142,6 @@ export interface RecurringTransaction {
   auto: boolean
   category: Category | null
   account_name: string
-  playlist: Playlist | null
   created_at: string
 }
 
@@ -263,6 +262,12 @@ export interface Loan {
   borrower: string
   amount: number
   interest_rate: number | null
+  /** % do lucro que fica comigo por intermediar. */
+  commission_rate: number | null
+  /** Comissão em reais: commission_rate × lucro. */
+  commission: number
+  /** Total a receber − total que entrou. */
+  profit: number
   start_date: string
   due_date: string | null
   status: LoanStatus
@@ -371,3 +376,87 @@ export interface Alert {
 }
 
 export type Rates = Record<Currency, { rate: number; updated_at: string | null }>
+
+export interface Sheet {
+  id: number
+  title: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export type MarketKind = "stock" | "crypto"
+export type MarketRange = "1d" | "5d" | "1mo" | "6mo" | "1y" | "5y"
+
+export interface MarketQuote {
+  price: number
+  previous_close: number | null
+  change_pct: number | null
+  day_high: number | null
+  day_low: number | null
+  year_high: number | null
+  year_low: number | null
+  updated_at: string | null
+}
+
+export interface MarketHolding {
+  quantity: number
+  /** Na moeda do código. */
+  average_price: number
+  cost_brl: number
+  realized_brl: number
+  value_brl: number | null
+  gain_brl: number | null
+  gain_pct: number | null
+  day_change_brl: number | null
+}
+
+export interface MarketTrade {
+  id: number
+  symbol_id: number
+  side: "buy" | "sell"
+  date: string
+  quantity: number
+  price: number
+  fx_rate: number
+  account_id: number | null
+  notes: string | null
+}
+
+export interface MarketSymbol {
+  id: number
+  code: string
+  kind: MarketKind
+  name: string
+  /** Moeda da cotação (BRL, USD). */
+  currency: string
+  /** Reais por unidade da moeda; null sem cotação. */
+  rate: number | null
+  quote: MarketQuote | null
+  holding: MarketHolding | null
+  trades: MarketTrade[]
+}
+
+export interface MarketOverview {
+  symbols: MarketSymbol[]
+  portfolio: {
+    value_brl: number
+    cost_brl: number
+    gain_brl: number
+    gain_pct: number | null
+    day_change_brl: number
+    day_change_pct: number | null
+    missing_quotes: boolean
+  }
+}
+
+export interface PricePoint {
+  t: number
+  v: number
+}
+
+export interface PortfolioPoint {
+  date: string
+  value: number
+  invested: number
+}

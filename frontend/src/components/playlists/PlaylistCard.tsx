@@ -2,7 +2,7 @@ import { Pencil, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { Card } from "../ui/Card"
 import { Badge } from "../ui/Badge"
-import { formatCurrency, formatMoney } from "../../lib/format"
+import { formatCurrency, formatMoney, formatRate } from "../../lib/format"
 import { getAssetOutstanding, getTotalInvested, isDeclaredValue } from "../../lib/asset"
 import { ASSET_TYPES } from "../../lib/constants"
 import type { Playlist } from "../../types"
@@ -91,7 +91,7 @@ export function PlaylistCard({
         {foreign && (
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {playlist.rate
-              ? `≈ ${formatCurrency(outstanding)} · 1 ${playlist.currency} = ${formatCurrency(playlist.rate)}`
+              ? `≈ ${formatCurrency(outstanding)} · 1 ${playlist.currency} = ${formatRate(playlist.rate)}`
               : "sem cotação no momento"}
           </p>
         )}

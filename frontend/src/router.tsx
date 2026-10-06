@@ -1,58 +1,38 @@
-import { Suspense, lazy, type ComponentType, type ReactNode } from "react"
+import { Suspense, lazy, type ComponentType } from "react"
 import { Navigate, createBrowserRouter } from "react-router-dom"
 import { AppLayout } from "./components/layout/AppLayout"
-import { Transactions } from "./pages/Transactions"
-import { Accounts } from "./pages/Accounts"
-import { Categories } from "./pages/Categories"
-import { Budgets } from "./pages/Budgets"
-import { Recurring } from "./pages/Recurring"
-import { Playlists } from "./pages/Playlists"
-import { Assets } from "./pages/Assets"
-import { ShoppingList } from "./pages/ShoppingList"
-import { NetWorthTable } from "./pages/NetWorthTable"
-import { Loans } from "./pages/Loans"
-import { Goals } from "./pages/Goals"
 
-// O Dashboard carrega a biblioteca de gráficos (~400KB). Separando em outro
-// chunk, quem abre direto em outra tela não paga por ela.
-const Dashboard = lazy(() =>
-  import("./pages/Dashboard").then((m) => ({ default: m.Dashboard }))
-)
-const PlaylistDetail = lazy(() =>
-  import("./pages/PlaylistDetail").then((m) => ({ default: m.PlaylistDetail }))
-)
-
-function Loading() {
-  return <p className="p-6 text-sm text-slate-400">Carregando...</p>
-}
-
-function withLayout(children: ReactNode) {
-  return <AppLayout>{children}</AppLayout>
-}
-
-function lazyRoute(Component: ComponentType) {
-  return withLayout(
-    <Suspense fallback={<Loading />}>
-      <Component />
-    </Suspense>
+// Cada tela é um arquivo à parte: abrir uma não baixa as outras (nem os gráficos).
+function page(load: () => Promise<ComponentType>) {
+  const Page = lazy(() => load().then((component) => ({ default: component })))
+  return (
+    <AppLayout>
+      <Suspense fallback={<p className="p-6 text-sm text-slate-400">Carregando...</p>}>
+        <Page />
+      </Suspense>
+    </AppLayout>
   )
 }
 
+const playlistDetail = () => import("./pages/PlaylistDetail").then((m) => m.PlaylistDetail)
+
 export const router = createBrowserRouter([
-  { path: "/", element: lazyRoute(Dashboard) },
-  { path: "/transacoes", element: withLayout(<Transactions />) },
-  { path: "/contas", element: withLayout(<Accounts />) },
-  { path: "/categorias", element: withLayout(<Categories />) },
-  { path: "/orcamentos", element: withLayout(<Budgets />) },
-  { path: "/recorrentes", element: withLayout(<Recurring />) },
-  { path: "/grupos", element: withLayout(<Playlists />) },
-  { path: "/grupos/:id", element: lazyRoute(PlaylistDetail) },
-  // Endereço antigo, para favoritos que ainda apontam para cá.
+  { path: "/", element: page(() => import("./pages/Dashboard").then((m) => m.Dashboard)) },
+  { path: "/transacoes", element: page(() => import("./pages/Transactions").then((m) => m.Transactions)) },
+  { path: "/contas", element: page(() => import("./pages/Accounts").then((m) => m.Accounts)) },
+  { path: "/categorias", element: page(() => import("./pages/Categories").then((m) => m.Categories)) },
+  { path: "/orcamentos", element: page(() => import("./pages/Budgets").then((m) => m.Budgets)) },
+  { path: "/recorrentes", element: page(() => import("./pages/Recurring").then((m) => m.Recurring)) },
+  { path: "/grupos", element: page(() => import("./pages/Playlists").then((m) => m.Playlists)) },
+  { path: "/grupos/:id", element: page(playlistDetail) },
   { path: "/playlists", element: <Navigate to="/grupos" replace /> },
-  { path: "/ativos", element: withLayout(<Assets />) },
-  { path: "/ativos/:id", element: lazyRoute(PlaylistDetail) },
-  { path: "/lista-compras", element: withLayout(<ShoppingList />) },
-  { path: "/patrimonio", element: withLayout(<NetWorthTable />) },
-  { path: "/emprestimos", element: withLayout(<Loans />) },
-  { path: "/metas", element: withLayout(<Goals />) },
+  { path: "/ativos", element: page(() => import("./pages/Assets").then((m) => m.Assets)) },
+  { path: "/ativos/:id", element: page(playlistDetail) },
+  { path: "/lista-compras", element: page(() => import("./pages/ShoppingList").then((m) => m.ShoppingList)) },
+  { path: "/patrimonio", element: page(() => import("./pages/NetWorthTable").then((m) => m.NetWorthTable)) },
+  { path: "/emprestimos", element: page(() => import("./pages/Loans").then((m) => m.Loans)) },
+  { path: "/metas", element: page(() => import("./pages/Goals").then((m) => m.Goals)) },
+  { path: "/calculos", element: page(() => import("./pages/Sheets").then((m) => m.Sheets)) },
+  { path: "/mercado", element: page(() => import("./pages/Market").then((m) => m.Market)) },
+  { path: "/bot", element: page(() => import("./pages/BotPage").then((m) => m.BotPage)) },
 ])

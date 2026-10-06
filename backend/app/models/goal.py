@@ -1,6 +1,6 @@
-from datetime import date, datetime
+from datetime import date
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 
 class Goal(db.Model):
@@ -15,7 +15,7 @@ class Goal(db.Model):
     target_amount = db.Column(db.Numeric(12, 2), nullable=False)
     deadline = db.Column(db.Date, nullable=True)
     playlist_id = db.Column(db.Integer, db.ForeignKey("playlists.id", ondelete="SET NULL"), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     playlist = db.relationship("Playlist")
 

@@ -202,3 +202,57 @@ def test_partes_maiores_que_o_recebido_sao_recusadas(client, loan_setup):
     )
     assert response.status_code == 400
     assert "passar do valor recebido" in response.get_json()["error"]
+
+
+# --- comissão: dinheiro de outros, uma parte do lucro fica comigo ----------
+
+
+@pytest.fixture
+def comissao(client, make_account):
+    """João põe 10k, devolve 11k; eu entro com zero e fico com 30% do lucro."""
+    conta = make_account(initial=0)
+    loan = client.post(
+        "/api/loans",
+        json={
+            "borrower": "Pedro",
+            "amount": 10_000,
+            "commission_rate": 30,
+            "start_date": "2026-01-10",
+            "participants": [
+                {"name": "João", "contributed": 10_000, "to_receive": 10_700, "is_me": False},
+                {"name": "Eu", "contributed": 0, "to_receive": 300, "is_me": True},
+            ],
+        },
+    ).get_json()
+    return conta, loan
+
+
+def test_comissao_e_parte_do_lucro(comissao):
+    _, loan = comissao
+    assert loan["profit"] == 1_000
+    assert loan["commission"] == 300
+    assert loan["my_outstanding"] == 0  # não pus dinheiro: nada meu na rua
+
+
+def test_so_comissao_nao_quita_antes_de_eu_receber(client, comissao):
+    conta, loan = comissao
+    # Primeira parcela: só dinheiro do João passando pela minha conta.
+    parcial = client.post(
+        f"/api/loans/{loan['id']}/repayments",
+        json={"amount": 5_000, "my_share": 0, "partners_share": 5_000, "account_id": conta.id},
+    ).get_json()
+    assert parcial["status"] == "active"
+
+    final = client.post(
+        f"/api/loans/{loan['id']}/repayments",
+        json={"amount": 6_000, "my_share": 300, "partners_share": 5_700, "account_id": conta.id},
+    ).get_json()
+    assert final["status"] == "paid"
+
+
+def test_comissao_fora_de_0_a_100_e_recusada(client):
+    response = client.post(
+        "/api/loans",
+        json={"borrower": "X", "amount": 1, "commission_rate": 150, "start_date": "2026-01-10"},
+    )
+    assert response.status_code == 400

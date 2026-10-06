@@ -9,16 +9,14 @@ import { RecurringRow } from "../components/recurring/RecurringRow"
 import { LaunchRecurringForm } from "../components/recurring/LaunchRecurringForm"
 import { useRecurring, useRecurringMutations } from "../hooks/useRecurring"
 import { Input, Label } from "../components/ui/Input"
-import { formatDate } from "../lib/format"
+import { formatDate, isoDate } from "../lib/format"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { RecurringTransaction } from "../types"
 import type { LaunchRecurringInput, RecurringInput } from "../api/recurring"
 
-/** "YYYY-MM-DD" + n dias, sem fuso: o vencimento é uma data, não um instante. */
 function addDays(iso: string, days: number) {
   const [y, m, d] = iso.split("-").map(Number)
-  const date = new Date(y, m - 1, d + days)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+  return isoDate(new Date(y, m - 1, d + days))
 }
 
 function PostponeForm({

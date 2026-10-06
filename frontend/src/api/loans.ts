@@ -12,6 +12,7 @@ export type LoanInput = {
   borrower: string
   amount: number
   interest_rate?: number | null
+  commission_rate?: number | null
   start_date: string
   due_date?: string | null
   status: LoanStatus

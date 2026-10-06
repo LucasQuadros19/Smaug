@@ -7,6 +7,18 @@ export function formatCurrency(value: number): string {
   return currencyFormatter.format(value)
 }
 
+const rateFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+})
+
+/** Cotação: com 2 casas o dólar a 4,9988 vira "R$ 5,00". */
+export function formatRate(value: number): string {
+  return rateFormatter.format(value)
+}
+
 /** Valor na moeda da posição. BTC com 8 casas: 0,05 BTC precisa aparecer. */
 export function formatMoney(value: number, currency: string = "BRL"): string {
   if (currency === "BRL") return formatCurrency(value)
@@ -40,9 +52,11 @@ export function formatMonthLabel(month: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
+/** "YYYY-MM-DD" no fuso de quem usa. toISOString() é UTC: depois das 21h no Brasil já é amanhã. */
+export function isoDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+}
+
 export function todayISO(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-    now.getDate()
-  ).padStart(2, "0")}`
+  return isoDate(new Date())
 }

@@ -10,8 +10,12 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
 function getInitialTheme(): Theme {
-  const stored = localStorage.getItem("theme")
-  if (stored === "light" || stored === "dark") return stored
+  try {
+    const stored = localStorage.getItem("theme")
+    if (stored === "light" || stored === "dark") return stored
+  } catch {
+    // armazenamento bloqueado (aba anônima, política do navegador): usa o padrão
+  }
   return "dark"
 }
 
@@ -20,7 +24,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark")
-    localStorage.setItem("theme", theme)
+    try {
+      localStorage.setItem("theme", theme)
+    } catch {
+      // sem armazenamento: o tema só não fica lembrado
+    }
   }, [theme])
 
   const toggleTheme = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"))

@@ -9,6 +9,7 @@ backups/
 *.sql.gz
 
 # Python
+
 venv/
 .venv/
 __pycache__/
@@ -42,3 +43,4 @@ backend/import_planilha.py
 
 # Anotações pessoais
 notas
+CLAUDE.md

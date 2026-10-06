@@ -1,6 +1,5 @@
-from datetime import datetime
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 
 class Budget(db.Model):
@@ -13,7 +12,7 @@ class Budget(db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=False)
     month = db.Column(db.Date, nullable=False)  # sempre dia 1 do mês
     limit_amount = db.Column(db.Numeric(12, 2), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self, spent=None):
         return {

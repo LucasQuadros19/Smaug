@@ -1,6 +1,6 @@
-from datetime import date, datetime
+from datetime import date
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 EXPECTATION_STATUSES = ("pending", "received", "cancelled")
 
@@ -16,7 +16,7 @@ class PlaylistExpectation(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="pending")
     transaction_id = db.Column(db.Integer, db.ForeignKey("transactions.id"), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
         return {

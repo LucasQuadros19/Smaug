@@ -3,6 +3,7 @@ from flask import Blueprint, jsonify, request
 from app.extensions import db
 from app.models.account import ACCOUNT_TYPES, Account
 from app.services.balance_service import get_balances_by_account
+from app.utils.parse import color, money
 
 accounts_bp = Blueprint("accounts", __name__)
 
@@ -33,8 +34,8 @@ def create_account():
     account = Account(
         name=name,
         type=account_type,
-        initial_balance=data.get("initial_balance", 0) or 0,
-        color=data.get("color", "#6366f1"),
+        initial_balance=money(data.get("initial_balance"), "initial_balance", allow_negative=True, required=False) or 0,
+        color=color(data.get("color"), "#6366f1"),
     )
     db.session.add(account)
     db.session.commit()
@@ -43,7 +44,7 @@ def create_account():
 
 @accounts_bp.put("/<int:account_id>")
 def update_account(account_id):
-    account = Account.query.get_or_404(account_id)
+    account = db.get_or_404(Account, account_id)
     data = request.get_json(silent=True) or {}
 
     if "name" in data:
@@ -56,9 +57,11 @@ def update_account(account_id):
             return jsonify({"error": f"type deve ser um de {ACCOUNT_TYPES}"}), 400
         account.type = data["type"]
     if "initial_balance" in data:
-        account.initial_balance = data["initial_balance"] or 0
+        account.initial_balance = (
+            money(data["initial_balance"], "initial_balance", allow_negative=True, required=False) or 0
+        )
     if "color" in data:
-        account.color = data["color"]
+        account.color = color(data["color"], account.color)
 
     db.session.commit()
     balances = get_balances_by_account()
@@ -69,7 +72,22 @@ def update_account(account_id):
 
 @accounts_bp.delete("/<int:account_id>")
 def delete_account(account_id):
-    account = Account.query.get_or_404(account_id)
+    from app.models.loan import LoanRepayment
+    from app.models.market import MarketTrade
+    from app.models.playlist_expectation import PlaylistExpectation
+    from app.models.snapshot import SnapshotEntry
+
+    account = db.get_or_404(Account, account_id)
+    if SnapshotEntry.query.filter_by(account_id=account_id).first():
+        return jsonify(
+            {"error": "Essa conta está nos registros de patrimônio — apagar mudaria o histórico. Zere o saldo dela em vez de apagar."}
+        ), 400
+    if LoanRepayment.query.filter_by(account_id=account_id).first() or MarketTrade.query.filter_by(account_id=account_id).first():
+        return jsonify(
+            {"error": "Essa conta recebeu valores de empréstimos ou do Mercado. Desfaça esses registros antes de apagar."}
+        ), 400
+
+    PlaylistExpectation.query.filter_by(account_id=account_id).update({"account_id": None})
     db.session.delete(account)
     db.session.commit()
     return "", 204

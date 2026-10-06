@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models.goal import Goal
 from app.models.playlist import Playlist
 from app.services.dashboard_service import get_summary
+from app.utils.parse import iso_date, money
 
 goals_bp = Blueprint("goals", __name__)
 
@@ -26,18 +27,9 @@ def _apply(goal, data):
     if "icon" in data:
         goal.icon = data["icon"] or "🎯"
     if "target_amount" in data:
-        try:
-            target = float(data["target_amount"])
-        except (TypeError, ValueError):
-            return "target_amount inválido"
-        if target <= 0:
-            return "target_amount deve ser maior que zero"
-        goal.target_amount = data["target_amount"]
+        goal.target_amount = money(data["target_amount"], "target_amount")
     if "deadline" in data:
-        try:
-            goal.deadline = date.fromisoformat(data["deadline"]) if data["deadline"] else None
-        except (TypeError, ValueError):
-            return "deadline inválido (use YYYY-MM-DD)"
+        goal.deadline = iso_date(data["deadline"], "deadline", required=False)
     if "playlist_id" in data:
         if data["playlist_id"] and not db.session.get(Playlist, data["playlist_id"]):
             return "playlist_id inválido"
@@ -66,7 +58,7 @@ def create_goal():
 
 @goals_bp.put("/<int:goal_id>")
 def update_goal(goal_id):
-    goal = Goal.query.get_or_404(goal_id)
+    goal = db.get_or_404(Goal, goal_id)
     error = _apply(goal, request.get_json(silent=True) or {})
     if error:
         db.session.rollback()
@@ -77,7 +69,7 @@ def update_goal(goal_id):
 
 @goals_bp.delete("/<int:goal_id>")
 def delete_goal(goal_id):
-    goal = Goal.query.get_or_404(goal_id)
+    goal = db.get_or_404(Goal, goal_id)
     db.session.delete(goal)
     db.session.commit()
     return "", 204

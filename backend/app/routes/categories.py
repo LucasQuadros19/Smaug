@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from app.extensions import db
 from app.models.category import CATEGORY_TYPES, Category
+from app.utils.parse import color
 
 categories_bp = Blueprint("categories", __name__)
 
@@ -30,7 +31,7 @@ def create_category():
     category = Category(
         name=name,
         type=category_type,
-        color=data.get("color", "#6366f1"),
+        color=color(data.get("color"), "#6366f1"),
         icon=data.get("icon", "💰"),
     )
     db.session.add(category)
@@ -40,7 +41,7 @@ def create_category():
 
 @categories_bp.put("/<int:category_id>")
 def update_category(category_id):
-    category = Category.query.get_or_404(category_id)
+    category = db.get_or_404(Category, category_id)
     data = request.get_json(silent=True) or {}
 
     if "name" in data:
@@ -53,7 +54,7 @@ def update_category(category_id):
             return jsonify({"error": f"type deve ser um de {CATEGORY_TYPES}"}), 400
         category.type = data["type"]
     if "color" in data:
-        category.color = data["color"]
+        category.color = color(data["color"], category.color)
     if "icon" in data:
         category.icon = data["icon"]
 
@@ -63,7 +64,7 @@ def update_category(category_id):
 
 @categories_bp.delete("/<int:category_id>")
 def delete_category(category_id):
-    category = Category.query.get_or_404(category_id)
+    category = db.get_or_404(Category, category_id)
     db.session.delete(category)
     db.session.commit()
     return "", 204

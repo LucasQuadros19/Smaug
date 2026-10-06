@@ -4,6 +4,7 @@ import { SegmentedControl } from "../ui/SegmentedControl"
 import { useAccounts } from "../../hooks/useAccounts"
 import { useCategories } from "../../hooks/useCategories"
 import { usePlaylists } from "../../hooks/usePlaylists"
+import { isoDate } from "../../lib/format"
 import type { TransactionFilters as Filters } from "../../api/transactions"
 import type { TransactionScope } from "../../types"
 
@@ -38,8 +39,7 @@ export function TransactionFilters({
     const end = new Date()
     const start = new Date()
     start.setDate(start.getDate() - days)
-    const iso = (d: Date) => d.toISOString().slice(0, 10)
-    onChange({ ...filters, start_date: iso(start), end_date: iso(end) })
+    onChange({ ...filters, start_date: isoDate(start), end_date: isoDate(end) })
   }
 
   return (

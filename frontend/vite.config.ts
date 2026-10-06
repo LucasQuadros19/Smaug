@@ -12,10 +12,16 @@ const proxy = {
   '/api': { target: 'http://127.0.0.1:5001', changeOrigin: true },
 }
 
+const headers = {
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+}
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: { __APP_VERSION__: JSON.stringify(version) },
   // host: true escuta em todas as interfaces, não só no localhost.
-  server: { host: true, port: 5173, proxy },
-  preview: { host: true, port: 4173, proxy },
+  server: { host: true, port: 5173, proxy, headers },
+  preview: { host: true, port: 4173, proxy, headers },
 })

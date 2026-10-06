@@ -14,6 +14,7 @@ from app.models.transaction import Transaction
 from app.services.auto_value_service import auto_value_map
 from app.services.balance_service import get_playlist_totals
 from app.services.rates import CURRENCIES
+from app.utils.parse import color, money
 
 playlists_bp = Blueprint("playlists", __name__)
 
@@ -37,7 +38,7 @@ def list_playlists():
 
 @playlists_bp.get("/<int:playlist_id>")
 def get_playlist(playlist_id):
-    playlist = Playlist.query.get_or_404(playlist_id)
+    playlist = db.get_or_404(Playlist, playlist_id)
     totals = get_playlist_totals()
     entry = totals.get(playlist_id, {})
     return jsonify(
@@ -62,7 +63,7 @@ def playlist_history(playlist_id):
 
     from app.models.snapshot import Snapshot, SnapshotEntry
 
-    playlist = Playlist.query.get_or_404(playlist_id)
+    playlist = db.get_or_404(Playlist, playlist_id)
 
     rows = (
         db.session.query(Snapshot.date, SnapshotEntry.value)
@@ -140,11 +141,11 @@ def create_playlist():
     playlist = Playlist(
         name=name,
         description=data.get("description"),
-        color=data.get("color", "#8b5cf6"),
+        color=color(data.get("color"), "#8b5cf6"),
         icon=data.get("icon", "📁"),
         kind=kind,
         counts_in_net_worth=bool(counts),
-        opening_value=data.get("opening_value") or 0,
+        opening_value=money(data.get("opening_value"), "opening_value", allow_negative=True, required=False) or 0,
         currency=currency,
         asset_type=asset_type,
         auto_source="loans" if data.get("auto_source") == "loans" else None,
@@ -156,7 +157,7 @@ def create_playlist():
 
 @playlists_bp.put("/<int:playlist_id>")
 def update_playlist(playlist_id):
-    playlist = Playlist.query.get_or_404(playlist_id)
+    playlist = db.get_or_404(Playlist, playlist_id)
     data = request.get_json(silent=True) or {}
 
     if "name" in data:
@@ -167,7 +168,7 @@ def update_playlist(playlist_id):
     if "description" in data:
         playlist.description = data["description"]
     if "color" in data:
-        playlist.color = data["color"]
+        playlist.color = color(data["color"], playlist.color)
     if "icon" in data:
         playlist.icon = data["icon"]
     if "kind" in data:
@@ -178,7 +179,9 @@ def update_playlist(playlist_id):
         playlist.counts_in_net_worth = bool(data["counts_in_net_worth"])
     if "opening_value" in data:
         # Na moeda da posição. Negativo é permitido: representa um passivo (dívida).
-        playlist.opening_value = data["opening_value"] or 0
+        playlist.opening_value = (
+            money(data["opening_value"], "opening_value", allow_negative=True, required=False) or 0
+        )
     if "currency" in data:
         if data["currency"] not in CURRENCIES:
             return jsonify({"error": f"currency deve ser uma de {CURRENCIES}"}), 400
@@ -206,7 +209,16 @@ def update_playlist(playlist_id):
 
 @playlists_bp.delete("/<int:playlist_id>")
 def delete_playlist(playlist_id):
-    playlist = Playlist.query.get_or_404(playlist_id)
+    from app.models.snapshot import SnapshotEntry
+
+    playlist = db.get_or_404(Playlist, playlist_id)
+    if SnapshotEntry.query.filter_by(playlist_id=playlist_id).first():
+        return jsonify(
+            {
+                "error": "Esse item está nos registros de patrimônio — apagar mudaria o histórico. "
+                "Para tirá-lo do total, desligue 'Contar no patrimônio' ou zere o valor."
+            }
+        ), 400
     Transaction.query.filter_by(playlist_id=playlist_id).update({"playlist_id": None})
     RecurringTransaction.query.filter_by(playlist_id=playlist_id).update({"playlist_id": None})
     db.session.delete(playlist)

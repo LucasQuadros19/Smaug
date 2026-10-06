@@ -2,6 +2,7 @@
 
 import csv
 import io
+import re
 from datetime import date
 
 from flask import Blueprint, Response
@@ -16,11 +17,23 @@ from app.models.transaction import Transaction
 export_bp = Blueprint("export", __name__)
 
 
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+_NUMBER = re.compile(r"-?\d+(,\d+)?")
+
+
+def _cell(value):
+    """Texto começando com = + - @ vira fórmula no Excel; número negativo não."""
+    text = str(value)
+    if text.startswith(_FORMULA_START) and not _NUMBER.fullmatch(text):
+        return "'" + text
+    return text
+
+
 def _csv_response(rows, filename):
     """CSV com separador `;` e vírgula decimal — o que o Excel pt-BR espera."""
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";")
-    writer.writerows(rows)
+    writer.writerows([_cell(value) for value in row] for row in rows)
 
     stamp = date.today().isoformat()
     return Response(
@@ -68,7 +81,7 @@ def export_snapshots():
                 snapshot.notes or "",
             ]
         )
-    return _csv_response(rows, "saldos-patrimonio")
+    return _csv_response(rows, "smaug-patrimonio")
 
 
 @export_bp.get("/transacoes.csv")
@@ -97,7 +110,7 @@ def export_transactions():
                 t.notes or "",
             ]
         )
-    return _csv_response(rows, "saldos-transacoes")
+    return _csv_response(rows, "smaug-transacoes")
 
 
 @export_bp.get("/emprestimos.csv")
@@ -148,4 +161,4 @@ def export_loans():
                     *tail,
                 ]
             )
-    return _csv_response(rows, "saldos-emprestimos")
+    return _csv_response(rows, "smaug-emprestimos")

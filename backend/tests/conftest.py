@@ -7,6 +7,8 @@ precisam do Docker de pé.
 from datetime import date
 
 import pytest
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 from app import create_app
 from app.extensions import db as _db
@@ -14,6 +16,13 @@ from app.models.account import Account
 from app.models.category import Category
 from app.models.playlist import Playlist
 from app.models.transaction import Transaction
+
+
+@event.listens_for(Engine, "connect")
+def _foreign_keys_on(dbapi_connection, _record):
+    """O SQLite ignora chave estrangeira por padrão; o Postgres não."""
+    if type(dbapi_connection).__module__.startswith("sqlite3"):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
 
 @pytest.fixture

@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Calculator, Plus, Trash2 } from "lucide-react"
 import clsx from "clsx"
 import { Button } from "../ui/Button"
 import { Input, Label, Select } from "../ui/Input"
 import { formatCurrency, todayISO } from "../../lib/format"
+import { splitLoan } from "../../lib/loanSplit"
 import type { Loan, LoanStatus } from "../../types"
 import type { LoanInput, LoanParticipantInput } from "../../api/loans"
 
@@ -31,6 +32,13 @@ export function LoanForm({
   const [borrower, setBorrower] = useState(initial?.borrower ?? "")
   const [amount, setAmount] = useState(initial ? String(initial.amount) : "")
   const [rate, setRate] = useState(initial?.interest_rate != null ? String(initial.interest_rate) : "")
+  const [commission, setCommission] = useState(
+    initial?.commission_rate != null ? String(initial.commission_rate) : ""
+  )
+  // Só para o cálculo: quanto a pessoa vai devolver no total.
+  const [totalBack, setTotalBack] = useState(
+    initial && initial.total_to_receive > 0 ? String(initial.total_to_receive) : ""
+  )
   const [startDate, setStartDate] = useState(initial?.start_date ?? todayISO())
   const [dueDate, setDueDate] = useState(initial?.due_date ?? "")
   const [status, setStatus] = useState<LoanStatus>(initial?.status ?? "active")
@@ -53,6 +61,18 @@ export function LoanForm({
   const totalToReceive = participants.reduce((s, p) => s + (Number(p.to_receive) || 0), 0)
   const loanAmount = Number(amount) || 0
   const mismatch = loanAmount > 0 && Math.abs(totalContributed - loanAmount) > 0.009
+  // Sugestão para o "vai devolver": valor + porcentagem.
+  const suggestedBack = loanAmount > 0 && rate !== "" ? loanAmount * (1 + Number(rate) / 100) : 0
+  const back = Number(totalBack) || suggestedBack
+
+  const calculate = () =>
+    setParticipants((prev) =>
+      splitLoan(
+        prev.map((p) => ({ ...p, contributed: Number(p.contributed) || 0 })),
+        back,
+        Number(commission) || 0
+      )
+    )
 
   return (
     <form
@@ -62,6 +82,7 @@ export function LoanForm({
           borrower,
           amount: loanAmount,
           interest_rate: rate === "" ? null : Number(rate),
+          commission_rate: commission === "" ? null : Number(commission),
           start_date: startDate,
           due_date: dueDate || null,
           status,
@@ -141,7 +162,8 @@ export function LoanForm({
               Quem entrou com dinheiro
             </p>
             <p className="text-xs text-slate-400">
-              Todos os valores são digitados por você — o app não calcula nada.
+              Digite quanto cada um colocou e use "Calcular divisão" — ou preencha o "Recebe" à
+              mão.
             </p>
           </div>
           <Button
@@ -151,6 +173,46 @@ export function LoanForm({
           >
             <Plus size={15} /> Pessoa
           </Button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2 dark:bg-white/[0.03]">
+          <div>
+            <Label>Vai devolver no total</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={totalBack}
+              onChange={(e) => setTotalBack(e.target.value)}
+              placeholder={suggestedBack ? suggestedBack.toFixed(2) : "Ex: 11000"}
+            />
+          </div>
+          <div>
+            <Label>Minha comissão (% do lucro)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={commission}
+              onChange={(e) => setCommission(e.target.value)}
+              placeholder="Ex: 30"
+            />
+          </div>
+          <div className="col-span-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-400">
+              {back > totalContributed && totalContributed > 0
+                ? `Lucro ${formatCurrency(back - totalContributed)}${
+                    Number(commission) > 0
+                      ? ` · sua comissão ${formatCurrency(((back - totalContributed) * Number(commission)) / 100)}`
+                      : ""
+                  }`
+                : "Lucro = o que volta − o que entrou."}
+            </p>
+            <Button type="button" variant="secondary" onClick={calculate} disabled={!back || totalContributed <= 0}>
+              <Calculator size={15} /> Calcular divisão
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-2">

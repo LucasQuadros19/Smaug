@@ -1,7 +1,6 @@
-from datetime import datetime
 from decimal import Decimal
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 LOAN_STATUSES = ("active", "paid", "late")
 
@@ -19,11 +18,14 @@ class Loan(db.Model):
     borrower = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     interest_rate = db.Column(db.Numeric(6, 2), nullable=True)
+    # Quando você empresta dinheiro de outros e fica com uma parte do lucro.
+    # Em % do lucro total (o que volta a mais do que saiu).
+    commission_rate = db.Column(db.Numeric(5, 2), nullable=True)
     start_date = db.Column(db.Date, nullable=False)
     due_date = db.Column(db.Date, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="active")
     notes = db.Column(db.String(500), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     participants = db.relationship(
         "LoanParticipant", backref="loan", cascade="all, delete-orphan"
@@ -62,6 +64,30 @@ class Loan(db.Model):
         return max(self.my_principal - self.my_repaid, Decimal(0))
 
     @property
+    def profit(self) -> Decimal:
+        """O que a pessoa devolve a mais do que pegou, pelo digitado nos participantes."""
+        received = sum((Decimal(p.to_receive or 0) for p in self.participants), Decimal(0))
+        contributed = sum((Decimal(p.contributed or 0) for p in self.participants), Decimal(0))
+        return max(received - contributed, Decimal(0))
+
+    @property
+    def commission(self) -> Decimal:
+        if not self.commission_rate:
+            return Decimal(0)
+        return (self.profit * Decimal(self.commission_rate) / 100).quantize(Decimal("0.01"))
+
+    @property
+    def mine_is_back(self) -> bool:
+        """O que era meu já voltou? Com dinheiro meu, é o principal. Só com
+        comissão (entrei com zero), é o que eu tenho a receber."""
+        if self.my_principal > 0:
+            return self.my_outstanding <= 0
+        my_to_receive = sum(
+            (Decimal(p.to_receive or 0) for p in self.participants if p.is_me), Decimal(0)
+        )
+        return self.my_repaid >= my_to_receive
+
+    @property
     def pending_to_partners(self) -> Decimal:
         """Dinheiro dos sócios que já voltou para mim e ainda não repassei.
 
@@ -82,6 +108,9 @@ class Loan(db.Model):
             "borrower": self.borrower,
             "amount": float(self.amount or 0),
             "interest_rate": float(self.interest_rate) if self.interest_rate is not None else None,
+            "commission_rate": float(self.commission_rate) if self.commission_rate is not None else None,
+            "commission": float(self.commission),
+            "profit": float(self.profit),
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "due_date": self.due_date.isoformat() if self.due_date else None,
             "status": self.status,
@@ -152,7 +181,7 @@ class LoanRepayment(db.Model):
     partner_transaction_id = db.Column(
         db.Integer, db.ForeignKey("transactions.id"), nullable=True
     )
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
         return {

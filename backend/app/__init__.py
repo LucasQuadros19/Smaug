@@ -1,4 +1,8 @@
-from flask import Flask
+from decimal import InvalidOperation
+
+from flask import Flask, request
+from sqlalchemy.exc import DataError, IntegrityError
+from werkzeug.exceptions import HTTPException
 
 from app.config import Config
 from app.extensions import db, migrate
@@ -23,7 +27,9 @@ def create_app(config_overrides=None):
     from app.routes.expectations import expectations_bp
     from app.routes.export import export_bp
     from app.routes.goals import goals_bp
+    from app.routes.sheets import sheets_bp
     from app.routes.loans import loans_bp
+    from app.routes.market import market_bp
     from app.routes.playlists import playlists_bp
     from app.routes.recurring import recurring_bp
     from app.routes.shopping_items import shopping_items_bp
@@ -43,6 +49,42 @@ def create_app(config_overrides=None):
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(export_bp, url_prefix="/api/export")
     app.register_blueprint(goals_bp, url_prefix="/api/goals")
+    app.register_blueprint(sheets_bp, url_prefix="/api/sheets")
+    app.register_blueprint(market_bp, url_prefix="/api/market")
+
+    @app.before_request
+    def require_json():
+        # Navegador não manda JSON de outro site sem pedir permissão (CORS), e
+        # aqui ninguém dá permissão: escrita só vem da própria tela.
+        if request.method in ("POST", "PUT", "PATCH") and not request.is_json:
+            return {"error": "Envie os dados como JSON"}, 415
+        return None
+
+    @app.after_request
+    def security_headers(response):
+        response.headers.setdefault("Cache-Control", "no-store")
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    @app.errorhandler(HTTPException)
+    def http_error(error):
+        return {"error": error.description}, error.code
+
+    @app.errorhandler(DataError)
+    @app.errorhandler(ValueError)
+    @app.errorhandler(InvalidOperation)
+    def invalid_data(_error):
+        db.session.rollback()
+        return {"error": "Algum valor enviado é inválido ou grande demais"}, 400
+
+    @app.errorhandler(IntegrityError)
+    def in_use(_error):
+        db.session.rollback()
+        return {"error": "Não deu para salvar: o registro está ligado a outros dados"}, 409
+
+    @app.errorhandler(500)
+    def internal_error(_error):
+        return {"error": "Erro interno — veja o log do backend"}, 500
 
     @app.get("/api/rates")
     def rates():

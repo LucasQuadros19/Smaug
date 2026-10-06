@@ -40,7 +40,12 @@ if lsof -ti:5001 >/dev/null 2>&1; then
   exit 1
 fi
 
-./venv/bin/flask db upgrade >/dev/null 2>&1 || true
+if ! ./venv/bin/flask db upgrade >/tmp/smaug-migrate.log 2>&1; then
+  echo ""
+  echo "  A migração do banco falhou. Veja o motivo em /tmp/smaug-migrate.log:"
+  tail -5 /tmp/smaug-migrate.log | sed 's/^/    /'
+  exit 1
+fi
 ./venv/bin/flask run >/tmp/saldos-backend.log 2>&1 &
 PID_BACK=$!
 

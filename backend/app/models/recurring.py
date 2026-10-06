@@ -1,6 +1,5 @@
-from datetime import datetime
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 RECURRING_FREQUENCIES = ("weekly", "monthly", "yearly")
 
@@ -25,7 +24,7 @@ class RecurringTransaction(db.Model):
     # `auto` diz quem lança. No manual o valor real varia todo mês (a luz nunca
     # vem igual), então quem lança é você, informando o valor daquele mês.
     auto = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     @property
     def due_date(self):
@@ -51,6 +50,5 @@ class RecurringTransaction(db.Model):
             "auto": self.auto,
             "category": self.category.to_dict() if self.category else None,
             "account_name": self.account.name if self.account else None,
-            "playlist": self.playlist.to_dict() if self.playlist else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

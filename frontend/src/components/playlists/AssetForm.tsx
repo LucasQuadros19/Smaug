@@ -6,7 +6,7 @@ import { ColorPicker } from "../ui/ColorPicker"
 import { IconPicker } from "../ui/IconPicker"
 import { Toggle } from "../ui/Toggle"
 import { useAccounts } from "../../hooks/useAccounts"
-import { formatCurrency, todayISO } from "../../lib/format"
+import { formatCurrency, formatRate, todayISO } from "../../lib/format"
 import { useRates } from "../../hooks/useDashboard"
 import { ASSET_TYPES, CURRENCIES } from "../../lib/constants"
 import type { AssetType, Currency, Playlist } from "../../types"
@@ -195,7 +195,7 @@ export function AssetForm({
           {foreign && !fromLoans && (
             <p className="mt-1 text-xs text-slate-400">
               {rate
-                ? `≈ ${formatCurrency(value * rate)} · 1 ${currency} = ${formatCurrency(rate)}`
+                ? `≈ ${formatCurrency(value * rate)} · 1 ${currency} = ${formatRate(rate)}`
                 : "Sem cotação no momento — o valor em reais aparece quando a internet voltar."}
             </p>
           )}

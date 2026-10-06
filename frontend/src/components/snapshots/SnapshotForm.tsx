@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Button } from "../ui/Button"
 import { Input, Label } from "../ui/Input"
-import { formatCurrency, formatMoney, todayISO } from "../../lib/format"
+import { formatCurrency, formatRate, todayISO } from "../../lib/format"
 import type { Account, Playlist } from "../../types"
 import type { SnapshotInput } from "../../api/snapshots"
 
@@ -105,7 +105,7 @@ export function SnapshotForm({
               {position.currency !== "BRL" && (
                 <p className="mt-1 text-[11px] text-slate-400">
                   {position.rate
-                    ? `≈ ${formatCurrency(inBrl(position))} · 1 ${position.currency} = ${formatMoney(position.rate)}`
+                    ? `≈ ${formatCurrency(inBrl(position))} · 1 ${position.currency} = ${formatRate(position.rate)}`
                     : "sem cotação no momento"}
                 </p>
               )}

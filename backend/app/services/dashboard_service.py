@@ -16,7 +16,6 @@ from app.services.auto_value_service import auto_value_map, pending_to_partners
 from app.services.balance_service import get_balances_by_account, get_playlist_totals
 from app.services.planning_service import get_alerts, goals_with_progress
 from app.services.history_service import (
-    get_allocation,
     get_cashflow_series,
     get_net_worth_series,
     month_bounds,
@@ -108,7 +107,7 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
         for row in expenses_by_category
     ]
 
-    budgets = Budget.query.filter_by(month=start).all()
+    budgets = Budget.query.options(joinedload(Budget.category)).filter_by(month=start).all()
     spent_rows = (
         _exclude_assets(db.session.query(Transaction.category_id, func.sum(Transaction.amount)))
         .filter(
@@ -232,7 +231,22 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
 
     if not compact:
         summary["cashflow_series"] = get_cashflow_series(end, granularity)
-        summary["net_worth_series"] = get_net_worth_series(end, granularity)
-        summary["allocation"] = get_allocation()
+        summary["net_worth_series"] = get_net_worth_series(end, granularity, playlists)
+        # Onde o dinheiro está: os mesmos valores do patrimônio. Passivo não é fatia do bolo.
+        allocation = [
+            {"label": a["name"], "value": a["balance"], "group": "Contas", "icon": "🏦"}
+            for a in accounts_balance
+            if a["balance"] > 0
+        ] + [
+            {
+                "label": p["name"],
+                "value": _parked(p),
+                "group": "Ativos" if p["kind"] == "asset" else "Grupos",
+                "icon": p["icon"],
+            }
+            for p in playlists_summary
+            if p["counts_in_net_worth"] and _parked(p) > 0
+        ]
+        summary["allocation"] = sorted(allocation, key=lambda i: i["value"], reverse=True)
 
     return summary

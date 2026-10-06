@@ -1,6 +1,5 @@
-from datetime import datetime
 
-from app.extensions import db
+from app.extensions import db, utcnow
 
 SHOPPING_PRIORITIES = ("low", "medium", "high")
 
@@ -15,7 +14,7 @@ class ShoppingItem(db.Model):
     priority = db.Column(db.String(20), nullable=False, default="medium")
     notes = db.Column(db.String(500), nullable=True)
     purchased = db.Column(db.Boolean, nullable=False, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
         return {

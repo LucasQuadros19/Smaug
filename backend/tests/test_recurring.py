@@ -32,14 +32,14 @@ def criar(client, make_account):
 
 def test_automatica_lanca_sozinha(client, criar):
     criar(auto=True)
-    assert client.post("/api/recurring/generate").get_json()["generated"] == 1
+    assert client.post("/api/recurring/generate", json={}).get_json()["generated"] == 1
     assert client.get("/api/transactions").get_json()["total"] == 1
 
 
 def test_manual_nao_lanca_sozinha(client, criar):
     """O ponto do botão: no manual nada acontece até você mandar."""
     criar(auto=False)
-    assert client.post("/api/recurring/generate").get_json()["generated"] == 0
+    assert client.post("/api/recurring/generate", json={}).get_json()["generated"] == 0
     assert client.get("/api/transactions").get_json()["total"] == 0
 
 
@@ -85,16 +85,16 @@ def test_alternar_o_botao_muda_quem_lanca(client, criar):
     item = criar(auto=True)
 
     assert client.put(f"/api/recurring/{item['id']}", json={"auto": False}).get_json()["auto"] is False
-    assert client.post("/api/recurring/generate").get_json()["generated"] == 0
+    assert client.post("/api/recurring/generate", json={}).get_json()["generated"] == 0
 
     assert client.put(f"/api/recurring/{item['id']}", json={"auto": True}).get_json()["auto"] is True
-    assert client.post("/api/recurring/generate").get_json()["generated"] == 1
+    assert client.post("/api/recurring/generate", json={}).get_json()["generated"] == 1
 
 
 def test_pausada_nao_lanca_de_jeito_nenhum(client, criar):
     item = criar(auto=True)
     client.put(f"/api/recurring/{item['id']}", json={"active": False})
-    assert client.post("/api/recurring/generate").get_json()["generated"] == 0
+    assert client.post("/api/recurring/generate", json={}).get_json()["generated"] == 0
 
 
 def test_recorrencia_nasce_automatica(client, make_account):

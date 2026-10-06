@@ -124,41 +124,30 @@ def _parked_value(opening, net, mode="capital"):
     return raw if opening < 0 else max(raw, Decimal(0))
 
 
-def get_net_worth_series(reference: date, granularity: str = "monthly"):
+def get_net_worth_series(reference: date, granularity: str, playlists: list):
     """Evolução do patrimônio: total, caixa e cada ativo que conta.
 
-    Quando existem snapshots (registros de patrimônio), usa o histórico real.
-    Sem snapshots, cai no cálculo a partir das transações — nesse caso o valor
-    declarado (opening_value) não tem data e é tratado como presente desde o
-    início da série.
+    Com registros de patrimônio, usa o histórico real. Sem eles, calcula pelas
+    transações — e o valor declarado, que não tem data, vale desde o início.
     """
-    from app.models.snapshot import Snapshot
+    counting = [p for p in playlists if p.counts_in_net_worth]
+    assets = [{"id": p.id, "name": p.name, "color": p.color, "icon": p.icon} for p in counting if p.kind == "asset"]
 
-    if Snapshot.query.first() is not None:
-        return _net_worth_from_snapshots()
+    series = _net_worth_from_snapshots(counting)
+    if series:
+        return {"series": series, "assets": assets, "source": "snapshots"}
 
     count = 12 if granularity == "weekly" else 6
-    periods = build_periods(reference, granularity, count)
+    initial_total = Decimal(db.session.query(func.sum(Account.initial_balance)).scalar() or 0)
 
-    initial_total = Decimal(
-        db.session.query(func.sum(Account.initial_balance)).scalar() or 0
-    )
-    counting = Playlist.query.filter_by(counts_in_net_worth=True).all()
-    assets = [p for p in counting if p.kind == "asset"]
-
-    series = []
-    for label, _start, end in periods:
+    for label, _start, end in build_periods(reference, granularity, count):
         cash = _cash_until(end, initial_total)
         nets = _net_by_playlist_until(end)
 
         point = {"period": label, "cash": float(cash), "assets": {}}
         parked_total = Decimal(0)
         for playlist in counting:
-            parked = _parked_value(
-                playlist.opening_brl,
-                nets.get(playlist.id, Decimal(0)),
-                playlist.value_mode,
-            )
+            parked = _parked_value(playlist.opening_brl, nets.get(playlist.id, Decimal(0)), playlist.value_mode)
             parked_total += parked
             if playlist.kind == "asset":
                 point["assets"][str(playlist.id)] = float(parked)
@@ -166,102 +155,42 @@ def get_net_worth_series(reference: date, granularity: str = "monthly"):
         point["net_worth"] = float(cash + parked_total)
         series.append(point)
 
-    return {
-        "series": series,
-        "assets": [
-            {"id": a.id, "name": a.name, "color": a.color, "icon": a.icon} for a in assets
-        ],
-    }
+    return {"series": series, "assets": assets}
 
 
-def _net_worth_from_snapshots():
-    """Série histórica real a partir dos registros de patrimônio.
+def _net_worth_from_snapshots(counting: list) -> list:
+    """Série real a partir dos registros de patrimônio. Vários registros no
+    mesmo dia: vale o último, que é o estado final daquele dia.
 
-    Quando há mais de um registro na mesma data (a planilha original tinha
-    vários), vale o último — é o estado final daquele dia.
+    Lê só as colunas necessárias: montar objeto por valor pesa com anos de histórico.
     """
-    from sqlalchemy.orm import selectinload
+    from app.models.snapshot import Snapshot, SnapshotEntry
 
-    from app.models.snapshot import Snapshot
-
-    snapshots = (
-        Snapshot.query.options(selectinload(Snapshot.entries))
+    kinds = {p.id: p.kind for p in counting}
+    rows = (
+        db.session.query(Snapshot.id, Snapshot.date, SnapshotEntry.playlist_id, SnapshotEntry.account_id, SnapshotEntry.value)
+        .join(SnapshotEntry, SnapshotEntry.snapshot_id == Snapshot.id)
         .order_by(Snapshot.date, Snapshot.id)
         .all()
     )
-    counting_ids = {
-        p.id: p for p in Playlist.query.filter_by(counts_in_net_worth=True).all()
-    }
-    assets = [p for p in counting_ids.values() if p.kind == "asset"]
 
     by_date = {}
-    for snap in snapshots:
-        cash = Decimal(0)
-        asset_values = {}
-        parked_total = Decimal(0)
-        for entry in snap.entries:
-            if entry.account_id is not None:
-                cash += Decimal(entry.value)
-            elif entry.playlist_id in counting_ids:
-                parked_total += Decimal(entry.value)
-                if counting_ids[entry.playlist_id].kind == "asset":
-                    asset_values[str(entry.playlist_id)] = float(entry.value)
+    totals = {}
+    current = None
+    for snapshot_id, when, playlist_id, account_id, value in rows:
+        if snapshot_id != current:
+            current = snapshot_id
+            key = when.isoformat()
+            point = by_date[key] = {"period": key, "cash": 0.0, "assets": {}, "net_worth": 0.0}
+            sums = totals[key] = [Decimal(0), Decimal(0)]
+        if account_id is not None:
+            sums[0] += value
+        elif playlist_id in kinds:
+            sums[1] += value
+            if kinds[playlist_id] == "asset":
+                point["assets"][str(playlist_id)] = float(value)
 
-        by_date[snap.date.isoformat()] = {
-            "period": snap.date.isoformat(),
-            "cash": float(cash),
-            "assets": asset_values,
-            "net_worth": float(cash + parked_total),
-        }
-
-    return {
-        "series": list(by_date.values()),
-        "assets": [
-            {"id": a.id, "name": a.name, "color": a.color, "icon": a.icon} for a in assets
-        ],
-        "source": "snapshots",
-    }
-
-
-def get_allocation():
-    """Onde o dinheiro está agora, item a item — para o gráfico de composição."""
-    from app.services.balance_service import get_balances_by_account
-
-    balances = get_balances_by_account()
-    items = []
-
-    for account in Account.query.order_by(Account.created_at).all():
-        value = float(account.initial_balance + balances.get(account.id, 0))
-        if value > 0:
-            items.append(
-                {
-                    "label": account.name,
-                    "value": value,
-                    "group": "Contas",
-                    "icon": "🏦",
-                }
-            )
-
-    nets = _net_by_playlist_until(date.today())
-    for playlist in Playlist.query.filter_by(counts_in_net_worth=True).all():
-        parked = float(
-            _parked_value(
-                playlist.opening_brl,
-                nets.get(playlist.id, Decimal(0)),
-                playlist.value_mode,
-            )
-        )
-        # O gráfico de composição mostra onde o dinheiro está; um passivo não é
-        # uma "fatia" do bolo, então fica de fora (aparece na tabela e no total).
-        if parked > 0:
-            items.append(
-                {
-                    "label": playlist.name,
-                    "value": parked,
-                    "group": "Ativos" if playlist.kind == "asset" else "Grupos",
-                    "icon": playlist.icon,
-                }
-            )
-
-    items.sort(key=lambda i: i["value"], reverse=True)
-    return items
+    for key, (cash_total, parked_total) in totals.items():
+        by_date[key]["cash"] = float(cash_total)
+        by_date[key]["net_worth"] = float(cash_total + parked_total)
+    return list(by_date.values())
