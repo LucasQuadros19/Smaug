@@ -7,10 +7,12 @@ from app.models.market import MarketSymbol, MarketTrade
 from app.models.playlist import Playlist
 from app.models.playlist_expectation import PlaylistExpectation
 from app.models.recurring import RecurringTransaction
+from app.models.share import Share
 from app.models.sheet import Sheet
 from app.models.shopping_item import ShoppingItem
 from app.models.snapshot import Snapshot, SnapshotEntry
 from app.models.transaction import Transaction
+from app.models.user import User
 
 __all__ = [
     "Account",
@@ -29,4 +31,6 @@ __all__ = [
     "Sheet",
     "MarketSymbol",
     "MarketTrade",
+    "User",
+    "Share",
 ]

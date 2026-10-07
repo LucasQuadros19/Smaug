@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Compose do servidor — fica só lá
+docker-compose.prod.yml
+
 # Dados do banco — dumps com informação financeira real, nunca no repositório
 backups/
 *.sql

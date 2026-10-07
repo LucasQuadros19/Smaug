@@ -1,10 +1,11 @@
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 SHOPPING_PRIORITIES = ("low", "medium", "high")
 
 
-class ShoppingItem(db.Model):
+class ShoppingItem(Owned, db.Model):
     __tablename__ = "shopping_items"
 
     id = db.Column(db.Integer, primary_key=True)

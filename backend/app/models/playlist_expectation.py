@@ -1,11 +1,12 @@
 from datetime import date
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 EXPECTATION_STATUSES = ("pending", "received", "cancelled")
 
 
-class PlaylistExpectation(db.Model):
+class PlaylistExpectation(Owned, db.Model):
     __tablename__ = "playlist_expectations"
 
     id = db.Column(db.Integer, primary_key=True)

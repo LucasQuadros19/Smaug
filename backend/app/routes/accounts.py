@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from app.extensions import db
 from app.models.account import ACCOUNT_TYPES, Account
+from app.routes.shares import limited_view
 from app.services.balance_service import get_balances_by_account
 from app.utils.parse import color, money
 
@@ -11,6 +12,8 @@ accounts_bp = Blueprint("accounts", __name__)
 @accounts_bp.get("")
 def list_accounts():
     accounts = Account.query.order_by(Account.created_at).all()
+    if limited_view("contas", "patrimonio"):
+        return jsonify([{"id": a.id, "name": a.name, "type": a.type, "color": a.color} for a in accounts])
     balances = get_balances_by_account()
     return jsonify(
         [

@@ -1,9 +1,10 @@
 from datetime import date
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 
-class Goal(db.Model):
+class Goal(Owned, db.Model):
     """Uma meta: chegar a X reais. Ligada a uma posição (ativo/grupo) ou, sem
     posição, ao patrimônio total."""
 

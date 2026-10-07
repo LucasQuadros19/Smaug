@@ -6,6 +6,22 @@ export type PlaylistKind = "group" | "asset"
 export type ExpectationStatus = "pending" | "received" | "cancelled"
 export type ShoppingPriority = "low" | "medium" | "high"
 
+export interface User {
+  id: string
+  username: string
+  hidden_tabs: string[]
+}
+
+export type ShareSection = "contas" | "patrimonio" | "emprestimos" | "mercado" | "calculos"
+
+export interface Share {
+  id: number
+  status: "active" | "incoming" | "outgoing"
+  user: { id: string; username: string }
+  i_share: ShareSection[]
+  they_share: ShareSection[]
+}
+
 export interface Account {
   id: number
   name: string

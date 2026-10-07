@@ -7,12 +7,13 @@ evolução. Só conversa com uma conta quando você escolhe uma na compra.
 from decimal import Decimal
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 MARKET_KINDS = ("stock", "crypto")
 TRADE_SIDES = ("buy", "sell")
 
 
-class MarketSymbol(db.Model):
+class MarketSymbol(Owned, db.Model):
     __tablename__ = "market_symbols"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -28,10 +29,10 @@ class MarketSymbol(db.Model):
         "MarketTrade", backref="symbol", cascade="all, delete-orphan", order_by="MarketTrade.date"
     )
 
-    __table_args__ = (db.UniqueConstraint("kind", "provider_id"),)
+    __table_args__ = (db.UniqueConstraint("user_id", "kind", "provider_id", name="uq_market_symbols_owner"),)
 
 
-class MarketTrade(db.Model):
+class MarketTrade(Owned, db.Model):
     """Uma compra ou venda. `price` é por unidade, na moeda do código."""
 
     __tablename__ = "market_trades"

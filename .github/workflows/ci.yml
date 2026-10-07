@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: saldos
+          POSTGRES_PASSWORD: saldos
+          POSTGRES_DB: saldos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U saldos -d saldos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Backend
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt pytest==9.1.1
+          python -m pytest
+
+      - name: Migrações num Postgres vazio
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://saldos:saldos@localhost:5432/saldos
+          SECRET_KEY: so-para-a-migracao-da-pipeline-0000
+        run: flask db upgrade
+
+      - name: Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run check
+          npm run build
+
+  docker:
+    needs: testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/smaug:latest
+            ${{ secrets.DOCKER_USERNAME }}/smaug:${{ github.sha }}

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 PLAYLIST_KINDS = ("group", "asset")
 
@@ -29,7 +30,7 @@ DEFAULT_ASSET_TYPE = "investment"
 DECLARED_ASSET_TYPES = tuple(t for t, mode in ASSET_TYPE_MODES.items() if mode == "declarado")
 
 
-class Playlist(db.Model):
+class Playlist(Owned, db.Model):
     __tablename__ = "playlists"
 
     id = db.Column(db.Integer, primary_key=True)

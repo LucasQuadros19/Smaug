@@ -1,0 +1,17 @@
+*
+!backend
+!frontend
+backend/*
+frontend/*
+!backend/app
+!backend/migrations
+!backend/requirements.txt
+!backend/run.py
+!frontend/index.html
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/public
+!frontend/src
+!frontend/tsconfig*.json
+!frontend/vite.config.ts
+**/__pycache__

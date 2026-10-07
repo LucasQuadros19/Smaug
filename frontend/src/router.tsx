@@ -35,4 +35,6 @@ export const router = createBrowserRouter([
   { path: "/calculos", element: page(() => import("./pages/Sheets").then((m) => m.Sheets)) },
   { path: "/mercado", element: page(() => import("./pages/Market").then((m) => m.Market)) },
   { path: "/bot", element: page(() => import("./pages/BotPage").then((m) => m.BotPage)) },
+  { path: "/configuracoes", element: page(() => import("./pages/Settings").then((m) => m.Settings)) },
+  { path: "/usuario", element: page(() => import("./pages/User").then((m) => m.UserPage)) },
 ])

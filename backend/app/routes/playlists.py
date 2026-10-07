@@ -11,6 +11,7 @@ from app.models.playlist import (
 )
 from app.models.recurring import RecurringTransaction
 from app.models.transaction import Transaction
+from app.routes.shares import limited_view
 from app.services.auto_value_service import auto_value_map
 from app.services.balance_service import get_playlist_totals
 from app.services.rates import CURRENCIES
@@ -22,6 +23,10 @@ playlists_bp = Blueprint("playlists", __name__)
 @playlists_bp.get("")
 def list_playlists():
     playlists = Playlist.query.order_by(Playlist.created_at).all()
+    if limited_view("patrimonio"):
+        return jsonify(
+            [{"id": p.id, "name": p.name, "icon": p.icon, "color": p.color, "kind": p.kind} for p in playlists]
+        )
     totals = get_playlist_totals()
     auto = auto_value_map(playlists)
     return jsonify(

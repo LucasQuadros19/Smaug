@@ -45,7 +45,10 @@ export function useCalcRefs(): CalcRef[] {
 
   return useMemo(() => {
     const refs: CalcRef[] = []
-    const add = (key: string, value: number, hint: string) => refs.push({ key, value, hint })
+    // Nos dados de outra pessoa, o que ela não mostrou chega sem valor: melhor sem @ do que um 0 falso.
+    const add = (key: string, value: number | undefined, hint: string) => {
+      if (value != null) refs.push({ key, value, hint })
+    }
     // Dois empréstimos para o mesmo "Pedro" viram pedro e pedro_2.
     const unique = (base: string, used: Set<string>) => {
       let key = base || "sem_nome"
@@ -65,7 +68,7 @@ export function useCalcRefs(): CalcRef[] {
     }
 
     const usedAccounts = new Set<string>()
-    for (const a of accounts ?? []) add(`conta.${unique(slug(a.name), usedAccounts)}`, a.balance ?? 0, `saldo de ${a.name}`)
+    for (const a of accounts ?? []) add(`conta.${unique(slug(a.name), usedAccounts)}`, a.balance, `saldo de ${a.name}`)
 
     const usedAssets = new Set<string>()
     const usedGroups = new Set<string>()

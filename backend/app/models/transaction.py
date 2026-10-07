@@ -1,10 +1,11 @@
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 TRANSACTION_TYPES = ("income", "expense")
 
 
-class Transaction(db.Model):
+class Transaction(Owned, db.Model):
     __tablename__ = "transactions"
 
     id = db.Column(db.Integer, primary_key=True)

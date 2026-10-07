@@ -1,4 +1,15 @@
+import { getViewing } from "../lib/viewing"
+
 type Params = Record<string, string | number | boolean | null | undefined>
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
 
 async function request<T>(method: string, url: string, body?: unknown, params?: Params): Promise<T> {
   const query = new URLSearchParams()
@@ -7,10 +18,16 @@ async function request<T>(method: string, url: string, body?: unknown, params?: 
   }
   const qs = query.toString()
 
+  const headers: Record<string, string> = {}
   // Escrita sempre em JSON: o backend recusa outro formato (proteção contra CSRF).
+  if (method !== "GET") headers["Content-Type"] = "application/json"
+  // Vendo os dados de quem compartilhou: o backend confere se pode.
+  const viewing = getViewing()
+  if (viewing) headers["X-Owner"] = viewing.id
+
   const response = await fetch(`/api${url}${qs ? `?${qs}` : ""}`, {
     method,
-    headers: method === "GET" ? undefined : { "Content-Type": "application/json" },
+    headers,
     body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
   })
 
@@ -23,7 +40,10 @@ async function request<T>(method: string, url: string, body?: unknown, params?: 
   }
   if (!response.ok) {
     const message = (data as { error?: string } | undefined)?.error
-    throw new Error(message || (response.status >= 500 ? "Servidor indisponível ou com erro" : `Erro ${response.status}`))
+    throw new ApiError(
+      message || (response.status >= 500 ? "Servidor indisponível ou com erro" : `Erro ${response.status}`),
+      response.status
+    )
   }
   return data as T
 }

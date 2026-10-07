@@ -1,8 +1,9 @@
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 
-class Sheet(db.Model):
+class Sheet(Owned, db.Model):
     """Uma folha de cálculo: texto livre, uma conta por linha. As contas são
     feitas na tela; aqui só fica guardado o que você escreveu."""
 

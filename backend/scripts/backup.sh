@@ -18,7 +18,7 @@ FILE="$BACKUP_DIR/saldos-$STAMP.sql.gz"
 
 # Escreve num temporário e só renomeia no fim: um dump interrompido nunca
 # fica parecendo um backup válido.
-if pg_dump --no-owner --no-privileges | gzip > "$FILE.tmp"; then
+if pg_dump --no-owner --no-privileges -Z 6 > "$FILE.tmp"; then
     mv "$FILE.tmp" "$FILE"
     echo "[$(date +%H:%M:%S)] backup ok: $(basename "$FILE") ($(du -h "$FILE" | cut -f1))"
 else

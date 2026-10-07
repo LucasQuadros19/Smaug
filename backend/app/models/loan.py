@@ -1,11 +1,12 @@
 from decimal import Decimal
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 LOAN_STATUSES = ("active", "paid", "late")
 
 
-class Loan(db.Model):
+class Loan(Owned, db.Model):
     """Registro de um empréstimo feito a alguém.
 
     Todos os valores são digitados à mão — o app não calcula juros nem
@@ -134,7 +135,7 @@ class Loan(db.Model):
         }
 
 
-class LoanParticipant(db.Model):
+class LoanParticipant(Owned, db.Model):
     """Quem entrou com dinheiro nesse empréstimo e quanto recebe de volta."""
 
     __tablename__ = "loan_participants"
@@ -157,7 +158,7 @@ class LoanParticipant(db.Model):
         }
 
 
-class LoanRepayment(db.Model):
+class LoanRepayment(Owned, db.Model):
     """Uma parcela que voltou.
 
     `amount` é tudo o que entrou na conta; `my_share` é a parte que é minha e

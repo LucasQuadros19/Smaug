@@ -1,8 +1,9 @@
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 
-class Budget(db.Model):
+class Budget(Owned, db.Model):
     __tablename__ = "budgets"
     __table_args__ = (
         db.UniqueConstraint("category_id", "month", name="uq_budget_category_month"),

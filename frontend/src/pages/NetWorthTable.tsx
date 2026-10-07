@@ -13,6 +13,7 @@ import { Pagination } from "../components/ui/Pagination"
 import { useSnapshots, useSnapshotMutations } from "../hooks/useSnapshots"
 import { usePlaylists } from "../hooks/usePlaylists"
 import { useAccounts } from "../hooks/useAccounts"
+import { useViewing } from "../lib/viewing"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import { formatCurrency, formatDate, formatMoney } from "../lib/format"
 import type { Snapshot } from "../types"
@@ -55,6 +56,7 @@ export function NetWorthTable() {
   const snapshots = result?.items
   const { data: playlists } = usePlaylists()
   const { data: accounts } = useAccounts()
+  const viewing = useViewing()
   const { create, transfer, settle, invest, remove } = useSnapshotMutations()
   const [modal, setModal] = useState<"record" | "transfer" | "settle" | "invest" | null>(null)
   const { submit, error, reset } = useFormSubmit(() => setModal(null))
@@ -88,7 +90,7 @@ export function NetWorthTable() {
         action={
           <div className="flex items-center gap-2">
             <a
-              href="/api/export/patrimonio.csv"
+              href={`/api/export/patrimonio.csv${viewing ? `?owner=${viewing.id}` : ""}`}
               className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5"
               title="Baixar a planilha em CSV"
             >

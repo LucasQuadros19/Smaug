@@ -51,11 +51,11 @@ PID_BACK=$!
 
 # Espera o Flask responder antes de liberar o frontend.
 for _ in $(seq 1 40); do
-  curl -sf http://127.0.0.1:5001/api/accounts >/dev/null 2>&1 && break
+  curl -s -o /dev/null http://127.0.0.1:5001/api/auth/me && break
   sleep 0.5
 done
 
-if ! curl -sf http://127.0.0.1:5001/api/accounts >/dev/null 2>&1; then
+if ! curl -s -o /dev/null http://127.0.0.1:5001/api/auth/me; then
   echo ""
   echo "  O backend não subiu. Veja o motivo em /tmp/saldos-backend.log:"
   tail -5 /tmp/saldos-backend.log | sed 's/^/    /'

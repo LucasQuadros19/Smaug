@@ -1,10 +1,11 @@
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 ACCOUNT_TYPES = ("checking", "savings", "credit_card", "cash", "investment")
 
 
-class Account(db.Model):
+class Account(Owned, db.Model):
     __tablename__ = "accounts"
 
     id = db.Column(db.Integer, primary_key=True)

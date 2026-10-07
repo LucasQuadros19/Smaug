@@ -1,8 +1,9 @@
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 
-class Snapshot(db.Model):
+class Snapshot(Owned, db.Model):
     """Uma linha do registro de patrimônio: nesta data, cada posição vale X."""
 
     __tablename__ = "snapshots"
@@ -49,7 +50,7 @@ class Snapshot(db.Model):
         }
 
 
-class SnapshotEntry(db.Model):
+class SnapshotEntry(Owned, db.Model):
     __tablename__ = "snapshot_entries"
 
     id = db.Column(db.Integer, primary_key=True)

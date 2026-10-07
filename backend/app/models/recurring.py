@@ -1,10 +1,11 @@
 
 from app.extensions import db, utcnow
+from app.tenancy import Owned
 
 RECURRING_FREQUENCIES = ("weekly", "monthly", "yearly")
 
 
-class RecurringTransaction(db.Model):
+class RecurringTransaction(Owned, db.Model):
     __tablename__ = "recurring_transactions"
 
     id = db.Column(db.Integer, primary_key=True)
