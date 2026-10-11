@@ -2,39 +2,21 @@ from datetime import date as date_cls
 from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import case, func
 from sqlalchemy.orm import selectinload
 
 from app.extensions import db
-from app.utils.pagination import paginate
 from app.models.account import Account
 from app.models.playlist import Playlist
 from app.models.snapshot import Snapshot, SnapshotEntry
-from app.models.transaction import Transaction
-from app.utils.parse import iso_date, money
+from app.services.balance_service import get_balances_by_account
+from app.utils.pagination import paginate
+from app.utils.parse import find, iso_date, money, text
 
 snapshots_bp = Blueprint("snapshots", __name__)
 
 # Valor na moeda da posição: 8 casas para caber fração de bitcoin.
 NATIVE_PLACES = Decimal("0.00000001")
 
-
-
-def _moved_by_account():
-    """Quanto cada conta já andou por transações — usado na reconciliação."""
-    return dict(
-        db.session.query(
-            Transaction.account_id,
-            func.sum(
-                case(
-                    (Transaction.type == "income", Transaction.amount),
-                    else_=-Transaction.amount,
-                )
-            ),
-        )
-        .group_by(Transaction.account_id)
-        .all()
-    )
 
 
 def _create_snapshot(payload):
@@ -52,21 +34,25 @@ def _create_snapshot(payload):
     snapshot = Snapshot(
         date=when,
         inflow=money(payload.get("inflow"), "inflow", allow_negative=True, required=False) or 0,
-        notes=(payload.get("notes") or "").strip() or None if payload.get("notes") else None,
+        notes=text(payload.get("notes"), "notes") or None,
     )
     db.session.add(snapshot)
     db.session.flush()
 
-    moved = _moved_by_account()
+    # Até a data do registro: o que entrou e saiu depois continua valendo no saldo de hoje.
+    moved = get_balances_by_account(until=when)
 
     for raw in entries:
+        if not isinstance(raw, dict):
+            db.session.rollback()
+            return None, ("Cada entrada precisa de playlist_id ou account_id", 400)
         value = money(raw.get("value"), "value", allow_negative=True, required=False) or Decimal(0)
         native_value = None
         playlist_id = raw.get("playlist_id")
         account_id = raw.get("account_id")
 
         if playlist_id:
-            playlist = db.session.get(Playlist, playlist_id)
+            playlist = find(Playlist, playlist_id)
             if not playlist:
                 db.session.rollback()
                 return None, (f"playlist_id {playlist_id} inválido", 400)
@@ -84,11 +70,11 @@ def _create_snapshot(payload):
             if not playlist.auto_source:
                 playlist.opening_value = native_value if native_value is not None else value
         elif account_id:
-            account = db.session.get(Account, account_id)
+            account = find(Account, account_id)
             if not account:
                 db.session.rollback()
                 return None, (f"account_id {account_id} inválido", 400)
-            # Força o saldo exibido a bater com o valor registrado.
+            # O saldo naquela data passa a ser o valor registrado.
             account.initial_balance = value - Decimal(moved.get(account_id) or 0)
         else:
             db.session.rollback()
@@ -134,16 +120,15 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
     Nada some nem aparece do nada: o patrimônio total continua igual, só muda
     onde o dinheiro está.
     """
-    from app.services.balance_service import get_balances_by_account
-
     amount = money(raw_amount, "amount")
+    when = iso_date(when, "date", required=False) or date_cls.today()
 
-    if not origin or not target:
+    if not isinstance(origin, dict) or not isinstance(target, dict):
         return jsonify({"error": "Informe 'from' e 'to' como {type, id}"}), 400
     if origin.get("type") == target.get("type") and str(origin.get("id")) == str(target.get("id")):
         return jsonify({"error": "Origem e destino precisam ser diferentes"}), 400
 
-    balances = get_balances_by_account()
+    balances = get_balances_by_account(until=when)
     playlists = {p.id: p for p in Playlist.query.all()}
     # Na moeda de cada posição; `amount` é sempre em reais.
     positions = {pid: Decimal(p.opening_value or 0) for pid, p in playlists.items()}
@@ -189,7 +174,7 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
 
     result, error = _create_snapshot(
         {
-            "date": when or date_cls.today().isoformat(),
+            "date": when,
             "notes": notes,
             "entries": entries,
         }
@@ -219,15 +204,13 @@ def settle():
     casa sai dos livros por R$50.848 mas você recebeu R$60.000. A diferença é
     lucro realizado e aparece como crescimento do patrimônio.
     """
-    from app.services.balance_service import get_balances_by_account
-
     data = request.get_json(silent=True) or {}
 
     origin = data.get("from")
-    if not origin or origin.get("type") != "playlist":
+    if not isinstance(origin, dict) or origin.get("type") != "playlist":
         return jsonify({"error": "Informe 'from' como {type:'playlist', id}"}), 400
 
-    playlist = db.session.get(Playlist, origin.get("id"))
+    playlist = find(Playlist, origin.get("id"))
     if not playlist:
         return jsonify({"error": "posição não encontrada"}), 400
     if playlist.auto_source:
@@ -235,7 +218,7 @@ def settle():
             {"error": "Essa posição vem de outra tela — quite por lá (ex: Empréstimos)"}
         ), 400
 
-    account = db.session.get(Account, data.get("to_account_id"))
+    account = find(Account, data.get("to_account_id"))
     if not account:
         return jsonify({"error": "Informe a conta que recebeu o dinheiro"}), 400
 
@@ -244,6 +227,7 @@ def settle():
         return jsonify({"error": f"Sem cotação de {playlist.currency} ainda — confira a internet"}), 400
 
     received = money(data.get("received"), "received")
+    when = iso_date(data.get("date"), "date", required=False) or date_cls.today()
     # Tudo em reais aqui; a posição guarda na moeda dela.
     current = (Decimal(playlist.opening_value or 0) * rate).quantize(Decimal("0.01"))
     raw_reduce = data.get("reduce_by")
@@ -258,7 +242,7 @@ def settle():
             {"error": f"'{playlist.name}' vale {available:.2f} — não dá para baixar {reduce_by:.2f}"}
         ), 400
 
-    balances = get_balances_by_account()
+    balances = get_balances_by_account(until=when)
     positions = {p.id: Decimal(p.opening_value or 0) for p in Playlist.query.all()}
     accounts = {
         a.id: Decimal(a.initial_balance or 0) + Decimal(balances.get(a.id, 0))
@@ -278,7 +262,7 @@ def settle():
 
     result, error = _create_snapshot(
         {
-            "date": data.get("date") or date_cls.today().isoformat(),
+            "date": when,
             "notes": data.get("notes"),
             "entries": entries,
         }
@@ -299,7 +283,8 @@ def invest():
     """
     data = request.get_json(silent=True) or {}
 
-    playlist = db.session.get(Playlist, (data.get("to") or {}).get("id"))
+    target = data.get("to")
+    playlist = find(Playlist, target.get("id")) if isinstance(target, dict) else None
     if not playlist:
         return jsonify({"error": "Informe a posição em 'to' como {type:'playlist', id}"}), 400
     if playlist.auto_source:

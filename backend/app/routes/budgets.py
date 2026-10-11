@@ -8,8 +8,8 @@ from app.extensions import db
 from app.models.budget import Budget
 from app.models.category import Category
 from app.models.transaction import Transaction
-from app.services.history_service import month_bounds
-from app.utils.parse import money
+from app.services.history_service import exclude_asset_moves, month_bounds
+from app.utils.parse import find, money
 
 budgets_bp = Blueprint("budgets", __name__)
 
@@ -28,8 +28,8 @@ def _parse_month(value):
 def _spent_by_category(month: date):
     start, end = month_bounds(month)
     rows = (
-        db.session.query(
-            Transaction.category_id, func.sum(Transaction.amount).label("total")
+        exclude_asset_moves(
+            db.session.query(Transaction.category_id, func.sum(Transaction.amount).label("total"))
         )
         .filter(
             Transaction.type == "expense",
@@ -59,7 +59,7 @@ def create_budget():
     data = request.get_json(silent=True) or {}
 
     category_id = data.get("category_id")
-    if not category_id or not db.session.get(Category, category_id):
+    if not category_id or not find(Category, category_id):
         return jsonify({"error": "category_id inválido"}), 400
 
     limit_amount = money(data.get("limit_amount"), "limit_amount")

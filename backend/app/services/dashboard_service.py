@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
 from decimal import Decimal
@@ -9,13 +9,14 @@ from app.extensions import db
 from app.models.account import Account
 from app.models.budget import Budget
 from app.models.category import Category
-from app.models.playlist import DECLARED_ASSET_TYPES, Playlist
+from app.models.playlist import Playlist
 from app.models.playlist_expectation import PlaylistExpectation
 from app.models.transaction import Transaction
 from app.services.auto_value_service import auto_value_map, pending_to_partners
 from app.services.balance_service import get_balances_by_account, get_playlist_totals
 from app.services.planning_service import get_alerts, goals_with_progress
 from app.services.history_service import (
+    exclude_asset_moves,
     get_cashflow_series,
     get_net_worth_series,
     month_bounds,
@@ -24,25 +25,9 @@ from app.services.history_service import (
 
 
 
-def _exclude_assets(query):
-    """Tira do mês o dinheiro que só mudou de forma.
-
-    Vale para ativos de capital (empréstimo, investimento, obra): aportar não é
-    gasto. Não vale para ativos de valor declarado (veículo, imóvel) — abastecer
-    a moto é despesa de verdade, o dinheiro foi embora.
-    """
-    return query.outerjoin(Playlist, Transaction.playlist_id == Playlist.id).filter(
-        or_(
-            Transaction.playlist_id.is_(None),
-            Playlist.kind != "asset",
-            Playlist.asset_type.in_(DECLARED_ASSET_TYPES),
-        )
-    )
-
-
 def _totals_for_range(start, end):
     rows = (
-        _exclude_assets(db.session.query(Transaction.type, func.sum(Transaction.amount)))
+        exclude_asset_moves(db.session.query(Transaction.type, func.sum(Transaction.amount)))
         .filter(Transaction.date >= start, Transaction.date <= end)
         .group_by(Transaction.type)
         .all()
@@ -86,7 +71,7 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
         func.sum(Transaction.amount).label("total"),
     ).join(Transaction, Transaction.category_id == Category.id)
     expenses_by_category = (
-        _exclude_assets(expenses_by_category_query)
+        exclude_asset_moves(expenses_by_category_query)
         .filter(
             Transaction.type == "expense",
             Transaction.date >= start,
@@ -109,7 +94,7 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
 
     budgets = Budget.query.options(joinedload(Budget.category)).filter_by(month=start).all()
     spent_rows = (
-        _exclude_assets(db.session.query(Transaction.category_id, func.sum(Transaction.amount)))
+        exclude_asset_moves(db.session.query(Transaction.category_id, func.sum(Transaction.amount)))
         .filter(
             Transaction.type == "expense",
             Transaction.date >= start,

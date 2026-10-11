@@ -34,6 +34,7 @@ _SECTION_BY_BLUEPRINT = {
     "loans": "emprestimos",
     "market": "mercado",
     "sheets": "calculos",
+    "calendar": "contas",
 }
 _SECTION_BY_ENDPOINT = {
     "export.export_transactions": "contas",
@@ -44,6 +45,8 @@ _SECTION_BY_ENDPOINT = {
 _OWN_ACCOUNT_BLUEPRINTS = {"auth", "shares"}
 # Cotações: não são dados de ninguém.
 _PUBLIC_ENDPOINTS = {"rates"}
+# Juntam várias partes e mostram só as compartilhadas (ver `routes/calendar.py`).
+_MIXED_ENDPOINTS = {"calendar.month"}
 # Listas que os formulários usam; sem a parte delas saem só com nome (ver `limited_view`).
 _FORM_LISTS = {"accounts.list_accounts", "categories.list_categories", "playlists.list_playlists"}
 
@@ -75,7 +78,10 @@ def apply_shared_view():
 
     g.owner_id = owner_id
     g.sections = sections
-    if request.endpoint in _PUBLIC_ENDPOINTS or (request.method == "GET" and request.endpoint in _FORM_LISTS):
+    if (
+        request.endpoint in _PUBLIC_ENDPOINTS | _MIXED_ENDPOINTS
+        or (request.method == "GET" and request.endpoint in _FORM_LISTS)
+    ):
         return None
     if request.blueprint == "dashboard":
         needed = set(SECTIONS)

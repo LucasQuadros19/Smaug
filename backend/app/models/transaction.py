@@ -12,6 +12,10 @@ class Transaction(Owned, db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     playlist_id = db.Column(db.Integer, db.ForeignKey("playlists.id"), nullable=True)
+    # A recorrência que lançou este lançamento: o calendário mostra a ocorrência como paga.
+    recurring_id = db.Column(
+        db.Integer, db.ForeignKey("recurring_transactions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     description = db.Column(db.String(200), nullable=False)
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     type = db.Column(db.String(20), nullable=False)

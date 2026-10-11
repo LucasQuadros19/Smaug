@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 
 from app.extensions import db
+from app.utils.parse import text
 from app.models.sheet import Sheet
 
 sheets_bp = Blueprint("sheets", __name__)
@@ -8,7 +9,7 @@ sheets_bp = Blueprint("sheets", __name__)
 
 def _apply(sheet, data):
     if "title" in data:
-        title = (data.get("title") or "").strip()
+        title = text(data.get("title"), "title")
         if not title:
             return "O título não pode ser vazio"
         sheet.title = title[:100]

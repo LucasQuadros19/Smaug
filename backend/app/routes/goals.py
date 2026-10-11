@@ -6,7 +6,7 @@ from app.extensions import db
 from app.models.goal import Goal
 from app.models.playlist import Playlist
 from app.services.dashboard_service import get_summary
-from app.utils.parse import iso_date, money
+from app.utils.parse import find, iso_date, money, text
 
 goals_bp = Blueprint("goals", __name__)
 
@@ -20,7 +20,7 @@ def _goal_dict(goal_id):
 def _apply(goal, data):
     """Valida e aplica os campos enviados. Devolve mensagem de erro ou None."""
     if "name" in data:
-        name = (data.get("name") or "").strip()
+        name = text(data.get("name"), "name")
         if not name:
             return "O campo 'name' é obrigatório"
         goal.name = name
@@ -31,7 +31,7 @@ def _apply(goal, data):
     if "deadline" in data:
         goal.deadline = iso_date(data["deadline"], "deadline", required=False)
     if "playlist_id" in data:
-        if data["playlist_id"] and not db.session.get(Playlist, data["playlist_id"]):
+        if data["playlist_id"] and not find(Playlist, data["playlist_id"]):
             return "playlist_id inválido"
         goal.playlist_id = data["playlist_id"] or None
     return None

@@ -20,6 +20,9 @@ class RecurringTransaction(Owned, db.Model):
     # Adiamento só da ocorrência atual. Lançada, a próxima volta ao calendário
     # normal: aluguel do dia 5 adiado para o 12 continua vencendo dia 5 depois.
     postponed_until = db.Column(db.Date, nullable=True)
+    # Dia do mês escolhido no cadastro. Sem ele, o do dia 31 viraria 28 depois
+    # de fevereiro e ficaria no 28. Vazio nos cadastros antigos: vale o dia atual.
+    due_day = db.Column(db.SmallInteger, nullable=True)
     active = db.Column(db.Boolean, nullable=False, default=True)
     # Duas chaves diferentes: `active` diz se a conta ainda existe na rotina,
     # `auto` diz quem lança. No manual o valor real varia todo mês (a luz nunca

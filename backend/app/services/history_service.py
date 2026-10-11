@@ -9,8 +9,25 @@ from sqlalchemy import case, func, or_
 
 from app.extensions import db
 from app.models.account import Account
-from app.models.playlist import Playlist
+from app.models.playlist import DECLARED_ASSET_TYPES, Playlist
 from app.models.transaction import Transaction
+
+
+def exclude_asset_moves(query):
+    """Tira das receitas e despesas o dinheiro que só mudou de forma.
+
+    Vale para ativos de capital (empréstimo, investimento, obra): aportar não é
+    gasto. Não vale para ativos de valor declarado (veículo, imóvel) — abastecer
+    a moto é despesa de verdade, o dinheiro foi embora. Dashboard, gráfico e
+    orçamentos usam esta mesma regra.
+    """
+    return query.outerjoin(Playlist, Transaction.playlist_id == Playlist.id).filter(
+        or_(
+            Transaction.playlist_id.is_(None),
+            Playlist.kind != "asset",
+            Playlist.asset_type.in_(DECLARED_ASSET_TYPES),
+        )
+    )
 
 
 def month_bounds(month: date):
@@ -56,13 +73,8 @@ def get_cashflow_series(reference: date, granularity: str = "monthly"):
     window_end = periods[-1][2]
 
     rows = (
-        db.session.query(Transaction.date, Transaction.type, func.sum(Transaction.amount))
-        .outerjoin(Playlist, Transaction.playlist_id == Playlist.id)
-        .filter(
-            or_(Transaction.playlist_id.is_(None), Playlist.kind != "asset"),
-            Transaction.date >= window_start,
-            Transaction.date <= window_end,
-        )
+        exclude_asset_moves(db.session.query(Transaction.date, Transaction.type, func.sum(Transaction.amount)))
+        .filter(Transaction.date >= window_start, Transaction.date <= window_end)
         .group_by(Transaction.date, Transaction.type)
         .all()
     )

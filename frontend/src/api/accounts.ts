@@ -9,7 +9,7 @@ export type AccountInput = {
 }
 
 export const accountsApi = {
-  list: () => api.get<Account[]>("/accounts"),
+  list: (asOf?: string) => api.get<Account[]>("/accounts", { params: { as_of: asOf } }),
   create: (data: AccountInput) => api.post<Account>("/accounts", data),
   update: (id: number, data: Partial<AccountInput>) =>
     api.put<Account>(`/accounts/${id}`, data),

@@ -25,6 +25,7 @@ def create_app(config_overrides=None):
     from app.routes.accounts import accounts_bp
     from app.routes.auth import auth_bp, load_user
     from app.routes.budgets import budgets_bp
+    from app.routes.calendar import calendar_bp
     from app.routes.categories import categories_bp
     from app.routes.dashboard import dashboard_bp
     from app.routes.expectations import expectations_bp
@@ -44,6 +45,7 @@ def create_app(config_overrides=None):
     app.register_blueprint(categories_bp, url_prefix="/api/categories")
     app.register_blueprint(transactions_bp, url_prefix="/api/transactions")
     app.register_blueprint(budgets_bp, url_prefix="/api/budgets")
+    app.register_blueprint(calendar_bp, url_prefix="/api/calendar")
     app.register_blueprint(recurring_bp, url_prefix="/api/recurring")
     app.register_blueprint(playlists_bp, url_prefix="/api/playlists")
     app.register_blueprint(expectations_bp, url_prefix="/api/expectations")

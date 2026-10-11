@@ -8,7 +8,7 @@ from app.models.account import Account
 from app.models.playlist import Playlist
 from app.models.playlist_expectation import PlaylistExpectation
 from app.models.transaction import Transaction
-from app.utils.parse import iso_date, money
+from app.utils.parse import find, iso_date, money, text
 
 expectations_bp = Blueprint("expectations", __name__)
 
@@ -46,10 +46,10 @@ def create_expectation():
     data = request.get_json(silent=True) or {}
 
     playlist_id = data.get("playlist_id")
-    if not playlist_id or not db.session.get(Playlist, playlist_id):
+    if not playlist_id or not find(Playlist, playlist_id):
         return jsonify({"error": "playlist_id inválido"}), 400
 
-    description = (data.get("description") or "").strip()
+    description = text(data.get("description"), "description")
     if not description:
         return jsonify({"error": "O campo 'description' é obrigatório"}), 400
 
@@ -57,7 +57,7 @@ def create_expectation():
     expected_date = iso_date(data.get("expected_date"), "expected_date")
 
     account_id = data.get("account_id")
-    if account_id and not db.session.get(Account, account_id):
+    if account_id and not find(Account, account_id):
         return jsonify({"error": "account_id inválido"}), 400
 
     item = PlaylistExpectation(
@@ -78,7 +78,7 @@ def update_expectation(item_id):
     data = request.get_json(silent=True) or {}
 
     if "description" in data:
-        description = (data.get("description") or "").strip()
+        description = text(data.get("description"), "description")
         if not description:
             return jsonify({"error": "O campo 'description' não pode ser vazio"}), 400
         item.description = description
@@ -87,7 +87,7 @@ def update_expectation(item_id):
     if "expected_date" in data:
         item.expected_date = iso_date(data["expected_date"], "expected_date")
     if "account_id" in data:
-        if data["account_id"] and not db.session.get(Account, data["account_id"]):
+        if data["account_id"] and not find(Account, data["account_id"]):
             return jsonify({"error": "account_id inválido"}), 400
         item.account_id = data["account_id"]
 
@@ -112,7 +112,7 @@ def launch_expectation(item_id):
     data = request.get_json(silent=True) or {}
 
     account_id = data.get("account_id") or item.account_id
-    if not account_id or not db.session.get(Account, account_id):
+    if not account_id or not find(Account, account_id):
         return jsonify({"error": "account_id inválido"}), 400
 
     amount = money(data.get("amount", item.amount), "amount")

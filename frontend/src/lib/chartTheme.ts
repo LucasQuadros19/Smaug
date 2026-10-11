@@ -6,7 +6,7 @@ import type { Granularity } from "../types"
  * Checks de banda de luminosidade, croma, separação CVD e contraste passam
  * nos dois modos — ver scripts/validate_palette.js.
  */
-export const CATEGORICAL_LIGHT = [
+const CATEGORICAL_LIGHT = [
   "#2a78d6",
   "#eb6834",
   "#1baf7a",
@@ -15,7 +15,7 @@ export const CATEGORICAL_LIGHT = [
   "#008300",
 ]
 
-export const CATEGORICAL_DARK = [
+const CATEGORICAL_DARK = [
   "#3987e5",
   "#d95926",
   "#199e70",
@@ -24,14 +24,9 @@ export const CATEGORICAL_DARK = [
   "#008300",
 ]
 
-export function categoricalPalette(isDark: boolean) {
-  return isDark ? CATEGORICAL_DARK : CATEGORICAL_LIGHT
-}
-
 /** Cor do slot `index`, sem gerar hues novos: a partir do 7º item, cinza. */
 export function seriesColor(index: number, isDark: boolean) {
-  const palette = categoricalPalette(isDark)
-  return palette[index] ?? (isDark ? "#8a8a85" : "#6f6e69")
+  return (isDark ? CATEGORICAL_DARK : CATEGORICAL_LIGHT)[index] ?? (isDark ? "#8a8a85" : "#6f6e69")
 }
 
 export const AXIS_COLOR = "#94a3b8"

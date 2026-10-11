@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 from app.extensions import db
 from app.models.playlist import Playlist
 from app.models.shopping_item import SHOPPING_PRIORITIES, ShoppingItem
-from app.utils.parse import money
+from app.utils.parse import find, money, text
 
 shopping_items_bp = Blueprint("shopping_items", __name__)
 
@@ -33,14 +33,14 @@ def list_shopping_items():
 def create_shopping_item():
     data = request.get_json(silent=True) or {}
 
-    description = (data.get("description") or "").strip()
+    description = text(data.get("description"), "description")
     if not description:
         return jsonify({"error": "O campo 'description' é obrigatório"}), 400
 
     amount = money(data.get("amount"), "amount", allow_zero=True, required=False)
 
     playlist_id = data.get("playlist_id")
-    if playlist_id and not db.session.get(Playlist, playlist_id):
+    if playlist_id and not find(Playlist, playlist_id):
         return jsonify({"error": "playlist_id inválido"}), 400
 
     priority = data.get("priority", "medium")
@@ -65,7 +65,7 @@ def update_shopping_item(item_id):
     data = request.get_json(silent=True) or {}
 
     if "description" in data:
-        description = (data.get("description") or "").strip()
+        description = text(data.get("description"), "description")
         if not description:
             return jsonify({"error": "O campo 'description' não pode ser vazio"}), 400
         item.description = description

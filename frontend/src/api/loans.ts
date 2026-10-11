@@ -5,6 +5,7 @@ export type LoanParticipantInput = {
   name: string
   contributed: number
   to_receive: number
+  commission: number
   is_me: boolean
 }
 
@@ -12,7 +13,6 @@ export type LoanInput = {
   borrower: string
   amount: number
   interest_rate?: number | null
-  commission_rate?: number | null
   start_date: string
   due_date?: string | null
   status: LoanStatus

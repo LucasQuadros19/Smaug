@@ -4,6 +4,8 @@ from decimal import Decimal, InvalidOperation
 
 from werkzeug.exceptions import BadRequest
 
+from app.extensions import db
+
 _COLOR = re.compile(r"#[0-9a-fA-F]{3,8}")
 
 
@@ -42,3 +44,21 @@ def color(value, default):
     if not isinstance(value, str) or not _COLOR.fullmatch(value):
         raise BadRequest("Cor inválida (use #RRGGBB)")
     return value
+
+
+def text(value, field):
+    """Texto sem espaços nas pontas; vazio vira "". Número, lista etc. são recusados."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise BadRequest(f"{field} inválido")
+    return value.strip()
+
+
+def find(model, value):
+    """O registro com esse id, ou None se não existe ou se o id nem é um número válido."""
+    if isinstance(value, str) and value.isdigit():
+        value = int(value)
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 < value < 2**31:
+        return None
+    return db.session.get(model, value)

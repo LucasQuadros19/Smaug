@@ -86,7 +86,7 @@ def _check_references(session, obj):
         value = getattr(obj, key)
         if value is None or (obj not in session.new and not state.attrs[key].history.has_changes()):
             continue
-        if isinstance(value, bool) or not isinstance(value, (int, str)):
+        if isinstance(value, bool) or not isinstance(value, (int, str)) or (isinstance(value, int) and not 0 < value < 2**31):
             raise BadRequest(f"{key} inválido")
         with session.no_autoflush:
             if session.get(target, value) is None:

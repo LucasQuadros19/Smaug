@@ -1,5 +1,7 @@
 """Transferência e liquidação: o dinheiro precisa sempre ter para onde ir."""
 
+from datetime import date
+
 
 def _post(client, url, payload):
     response = client.post(url, json=payload)
@@ -146,3 +148,16 @@ def test_nao_liquida_posicao_derivada(client, make_account, make_position):
     )
     assert status == 400
     assert "Empréstimos" in body["error"]
+
+
+def test_registro_no_passado_nao_apaga_o_que_veio_depois(client, make_account, make_transaction):
+    """Regressão: registrar o saldo de uma data passada zerava os lançamentos posteriores."""
+    conta = make_account(initial=1_000)
+    make_transaction(conta, 100, when=date(2026, 9, 10))
+
+    no_dia = client.get("/api/accounts?as_of=2026-09-01").get_json()[0]["balance"]
+    status, _ = _post(client, "/api/snapshots", {"date": "2026-09-01", "entries": [{"account_id": conta.id, "value": 1_200}]})
+
+    assert no_dia == 1_000
+    assert status == 201
+    assert client.get("/api/accounts").get_json()[0]["balance"] == 1_100  # 1.200 no dia 1º, menos os 100 do dia 10

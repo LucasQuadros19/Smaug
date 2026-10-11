@@ -4,6 +4,8 @@ Todos os bugs que já apareceram na prática viraram teste aqui: dinheiro que
 sumia ao quitar, dívida contada como lucro, aporte inflando despesa do mês.
 """
 
+from datetime import date
+
 
 def test_patrimonio_soma_caixa_e_posicoes(make_account, make_position, summary):
     make_account(initial=1_000)
@@ -79,3 +81,24 @@ def test_gasto_real_sem_playlist_conta_como_despesa(
 
     assert data["month_expense"] == 250
     assert data["net_worth"] == 750
+
+
+def test_mesma_regra_de_despesa_no_dashboard_no_grafico_e_no_orcamento(
+    client, make_account, make_position, make_category, make_transaction, summary
+):
+    """Gasolina da moto é despesa; aporte no investimento não. Nos três lugares."""
+    account = make_account(initial=10_000)
+    categoria = make_category()
+    moto = make_position(name="moto", asset_type="vehicle")
+    cripto = make_position(name="cripto")
+    make_transaction(account, 100, playlist=moto, category=categoria)
+    make_transaction(account, 5_000, playlist=cripto, category=categoria)
+    mes = date.today().strftime("%Y-%m")
+    client.post("/api/budgets", json={"category_id": categoria.id, "limit_amount": 500, "month": mes})
+
+    data = summary()
+    orcamento = client.get(f"/api/budgets?month={mes}").get_json()[0]
+
+    assert data["month_expense"] == 100
+    assert data["cashflow_series"][-1]["expense"] == 100
+    assert orcamento["spent"] == 100

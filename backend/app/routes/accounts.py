@@ -4,7 +4,7 @@ from app.extensions import db
 from app.models.account import ACCOUNT_TYPES, Account
 from app.routes.shares import limited_view
 from app.services.balance_service import get_balances_by_account
-from app.utils.parse import color, money
+from app.utils.parse import color, iso_date, money, text
 
 accounts_bp = Blueprint("accounts", __name__)
 
@@ -14,7 +14,8 @@ def list_accounts():
     accounts = Account.query.order_by(Account.created_at).all()
     if limited_view("contas", "patrimonio"):
         return jsonify([{"id": a.id, "name": a.name, "type": a.type, "color": a.color} for a in accounts])
-    balances = get_balances_by_account()
+    # `as_of`: o saldo de cada conta naquele dia (o registro de patrimônio usa).
+    balances = get_balances_by_account(until=iso_date(request.args.get("as_of"), "as_of", required=False))
     return jsonify(
         [
             acc.to_dict(balance=acc.initial_balance + balances.get(acc.id, 0))
@@ -26,7 +27,7 @@ def list_accounts():
 @accounts_bp.post("")
 def create_account():
     data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
+    name = text(data.get("name"), "name")
     if not name:
         return jsonify({"error": "O campo 'name' é obrigatório"}), 400
 
@@ -51,7 +52,7 @@ def update_account(account_id):
     data = request.get_json(silent=True) or {}
 
     if "name" in data:
-        name = (data.get("name") or "").strip()
+        name = text(data.get("name"), "name")
         if not name:
             return jsonify({"error": "O campo 'name' não pode ser vazio"}), 400
         account.name = name

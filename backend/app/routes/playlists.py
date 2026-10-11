@@ -15,7 +15,7 @@ from app.routes.shares import limited_view
 from app.services.auto_value_service import auto_value_map
 from app.services.balance_service import get_playlist_totals
 from app.services.rates import CURRENCIES
-from app.utils.parse import color, money
+from app.utils.parse import color, money, text
 
 playlists_bp = Blueprint("playlists", __name__)
 
@@ -121,7 +121,7 @@ def playlist_history(playlist_id):
 @playlists_bp.post("")
 def create_playlist():
     data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
+    name = text(data.get("name"), "name")
     if not name:
         return jsonify({"error": "O campo 'name' é obrigatório"}), 400
 
@@ -166,7 +166,7 @@ def update_playlist(playlist_id):
     data = request.get_json(silent=True) or {}
 
     if "name" in data:
-        name = (data.get("name") or "").strip()
+        name = text(data.get("name"), "name")
         if not name:
             return jsonify({"error": "O campo 'name' não pode ser vazio"}), 400
         playlist.name = name

@@ -10,7 +10,7 @@ export function getAssetOutstanding(playlist: Playlist) {
   // Em valor declarado (veículo, imóvel) os lançamentos são custos: o valor é
   // só o que foi declarado. Abastecer não deixa a moto mais cara.
   const calculado =
-    playlist.value_mode === "declarado"
+    isDeclaredValue(playlist)
       ? opening
       : opening + (playlist.total_out ?? 0) - (playlist.total_in ?? 0)
   const outstanding = playlist.outstanding ?? calculado
@@ -39,7 +39,7 @@ export function sumLiabilities(playlists: Playlist[]): number {
 
 /** Total aportado: o que já era seu mais o que saiu do caixa para cá. */
 export function getTotalInvested(playlist: Playlist): number {
-  if (playlist.value_mode === "declarado") return playlist.opening_value ?? 0
+  if (isDeclaredValue(playlist)) return playlist.opening_value ?? 0
   return (playlist.opening_value ?? 0) + (playlist.total_out ?? 0)
 }
 

@@ -6,9 +6,12 @@ from app.extensions import db
 from app.models.transaction import Transaction
 
 
-def get_balances_by_account():
-    """Retorna {account_id: saldo_das_transacoes} (sem contar initial_balance)."""
-    rows = (
+def get_balances_by_account(until=None):
+    """Retorna {account_id: saldo_das_transacoes} (sem contar initial_balance).
+
+    Com `until`, só os lançamentos até essa data: o saldo daquele dia.
+    """
+    query = (
         db.session.query(
             Transaction.account_id,
             func.sum(
@@ -19,9 +22,10 @@ def get_balances_by_account():
             ).label("net"),
         )
         .group_by(Transaction.account_id)
-        .all()
     )
-    return {row.account_id: row.net or Decimal("0") for row in rows}
+    if until is not None:
+        query = query.filter(Transaction.date <= until)
+    return {row.account_id: row.net or Decimal("0") for row in query.all()}
 
 
 def get_playlist_totals():

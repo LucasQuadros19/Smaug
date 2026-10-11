@@ -1,10 +1,11 @@
 import { useState } from "react"
-import { Calculator, Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import clsx from "clsx"
 import { Button } from "../ui/Button"
 import { Input, Label, Select } from "../ui/Input"
+import { Toggle } from "../ui/Toggle"
+import { LoanBars } from "./LoanBars"
 import { formatCurrency, todayISO } from "../../lib/format"
-import { splitLoan } from "../../lib/loanSplit"
 import type { Loan, LoanStatus } from "../../types"
 import type { LoanInput, LoanParticipantInput } from "../../api/loans"
 
@@ -15,7 +16,7 @@ const STATUS_LABELS: Record<LoanStatus, string> = {
 }
 
 function emptyParticipant(isMe = false): LoanParticipantInput {
-  return { name: isMe ? "Eu" : "", contributed: 0, to_receive: 0, is_me: isMe }
+  return { name: isMe ? "Eu" : "", contributed: 0, to_receive: 0, commission: 0, is_me: isMe }
 }
 
 export function LoanForm({
@@ -32,13 +33,6 @@ export function LoanForm({
   const [borrower, setBorrower] = useState(initial?.borrower ?? "")
   const [amount, setAmount] = useState(initial ? String(initial.amount) : "")
   const [rate, setRate] = useState(initial?.interest_rate != null ? String(initial.interest_rate) : "")
-  const [commission, setCommission] = useState(
-    initial?.commission_rate != null ? String(initial.commission_rate) : ""
-  )
-  // Só para o cálculo: quanto a pessoa vai devolver no total.
-  const [totalBack, setTotalBack] = useState(
-    initial && initial.total_to_receive > 0 ? String(initial.total_to_receive) : ""
-  )
   const [startDate, setStartDate] = useState(initial?.start_date ?? todayISO())
   const [dueDate, setDueDate] = useState(initial?.due_date ?? "")
   const [status, setStatus] = useState<LoanStatus>(initial?.status ?? "active")
@@ -49,30 +43,38 @@ export function LoanForm({
           name: p.name,
           contributed: p.contributed,
           to_receive: p.to_receive,
+          commission: 0,
           is_me: p.is_me,
         }))
       : [emptyParticipant(true)]
   )
+  // A comissão é de uma pessoa só, escolhida na lista.
+  const initialCommissionIndex = initial?.participants.findIndex((p) => p.commission > 0) ?? -1
+  const [hasCommission, setHasCommission] = useState(initialCommissionIndex >= 0)
+  const [commission, setCommission] = useState(
+    initialCommissionIndex >= 0 ? String(initial!.participants[initialCommissionIndex].commission) : ""
+  )
+  const [commissionTo, setCommissionTo] = useState(Math.max(initialCommissionIndex, 0))
 
   const patch = (index: number, changes: Partial<LoanParticipantInput>) =>
     setParticipants((prev) => prev.map((p, i) => (i === index ? { ...p, ...changes } : p)))
 
-  const totalContributed = participants.reduce((s, p) => s + (Number(p.contributed) || 0), 0)
-  const totalToReceive = participants.reduce((s, p) => s + (Number(p.to_receive) || 0), 0)
+  const removeParticipant = (index: number) => {
+    setParticipants((prev) => prev.filter((_, i) => i !== index))
+    if (index < commissionTo) setCommissionTo(commissionTo - 1)
+    else if (index === commissionTo) setCommissionTo(0)
+  }
+
+  const withCommission = participants.map((p, i) => ({
+    ...p,
+    contributed: Number(p.contributed) || 0,
+    to_receive: Number(p.to_receive) || 0,
+    commission: hasCommission && i === commissionTo ? Number(commission) || 0 : 0,
+  }))
+  const totalContributed = withCommission.reduce((s, p) => s + p.contributed, 0)
+  const totalToReceive = withCommission.reduce((s, p) => s + p.to_receive + p.commission, 0)
   const loanAmount = Number(amount) || 0
   const mismatch = loanAmount > 0 && Math.abs(totalContributed - loanAmount) > 0.009
-  // Sugestão para o "vai devolver": valor + porcentagem.
-  const suggestedBack = loanAmount > 0 && rate !== "" ? loanAmount * (1 + Number(rate) / 100) : 0
-  const back = Number(totalBack) || suggestedBack
-
-  const calculate = () =>
-    setParticipants((prev) =>
-      splitLoan(
-        prev.map((p) => ({ ...p, contributed: Number(p.contributed) || 0 })),
-        back,
-        Number(commission) || 0
-      )
-    )
 
   return (
     <form
@@ -82,19 +84,13 @@ export function LoanForm({
           borrower,
           amount: loanAmount,
           interest_rate: rate === "" ? null : Number(rate),
-          commission_rate: commission === "" ? null : Number(commission),
           start_date: startDate,
           due_date: dueDate || null,
           status,
           notes: notes || null,
-          participants: participants
+          participants: withCommission
             .filter((p) => p.name.trim())
-            .map((p) => ({
-              name: p.name.trim(),
-              contributed: Number(p.contributed) || 0,
-              to_receive: Number(p.to_receive) || 0,
-              is_me: p.is_me,
-            })),
+            .map((p) => ({ ...p, name: p.name.trim() })),
         })
       }}
       className="space-y-4"
@@ -156,14 +152,11 @@ export function LoanForm({
       </div>
 
       <div className="space-y-3 rounded-xl border border-slate-100 p-3 dark:border-white/5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-              Quem entrou com dinheiro
-            </p>
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Divisão</p>
             <p className="text-xs text-slate-400">
-              Digite quanto cada um colocou e use "Calcular divisão" — ou preencha o "Recebe" à
-              mão.
+              Digite quanto cada um emprestou e quanto cada um recebe de volta.
             </p>
           </div>
           <Button
@@ -175,52 +168,17 @@ export function LoanForm({
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2 dark:bg-white/[0.03]">
-          <div>
-            <Label>Vai devolver no total</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={totalBack}
-              onChange={(e) => setTotalBack(e.target.value)}
-              placeholder={suggestedBack ? suggestedBack.toFixed(2) : "Ex: 11000"}
-            />
-          </div>
-          <div>
-            <Label>Minha comissão (% do lucro)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={commission}
-              onChange={(e) => setCommission(e.target.value)}
-              placeholder="Ex: 30"
-            />
-          </div>
-          <div className="col-span-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-slate-400">
-              {back > totalContributed && totalContributed > 0
-                ? `Lucro ${formatCurrency(back - totalContributed)}${
-                    Number(commission) > 0
-                      ? ` · sua comissão ${formatCurrency(((back - totalContributed) * Number(commission)) / 100)}`
-                      : ""
-                  }`
-                : "Lucro = o que volta − o que entrou."}
-            </p>
-            <Button type="button" variant="secondary" onClick={calculate} disabled={!back || totalContributed <= 0}>
-              <Calculator size={15} /> Calcular divisão
-            </Button>
-          </div>
-        </div>
-
         <div className="space-y-2">
+          <div className="hidden grid-cols-[1fr_1fr_1fr_4.5rem] gap-2 px-2 text-[11px] text-slate-400 sm:grid">
+            <span>Nome</span>
+            <span>Emprestou</span>
+            <span>Recebe</span>
+          </div>
           {participants.map((participant, index) => (
             <div
               key={index}
               className={clsx(
-                "grid grid-cols-[1fr_auto] gap-2 rounded-lg border p-2",
+                "grid grid-cols-[1fr_auto] gap-2 rounded-lg border p-2 sm:grid-cols-[3fr_4.5rem]",
                 participant.is_me
                   ? "border-indigo-200 bg-indigo-50/50 dark:border-indigo-500/20 dark:bg-indigo-500/5"
                   : "border-slate-100 dark:border-white/5"
@@ -231,20 +189,25 @@ export function LoanForm({
                   value={participant.name}
                   onChange={(e) => patch(index, { name: e.target.value })}
                   placeholder="Nome"
+                  aria-label="Nome"
                 />
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={participant.contributed || ""}
                   onChange={(e) => patch(index, { contributed: Number(e.target.value) })}
-                  placeholder="Entrou com"
+                  placeholder="Emprestou"
+                  aria-label="Emprestou"
                 />
                 <Input
                   type="number"
                   step="0.01"
+                  min="0"
                   value={participant.to_receive || ""}
                   onChange={(e) => patch(index, { to_receive: Number(e.target.value) })}
                   placeholder="Recebe"
+                  aria-label="Recebe"
                 />
               </div>
               <div className="flex items-center gap-1">
@@ -259,7 +222,7 @@ export function LoanForm({
                 </label>
                 <button
                   type="button"
-                  onClick={() => setParticipants((prev) => prev.filter((_, i) => i !== index))}
+                  onClick={() => removeParticipant(index)}
                   className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
                   aria-label="Remover pessoa"
                 >
@@ -270,15 +233,49 @@ export function LoanForm({
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-4 border-t border-slate-100 pt-3 text-sm dark:border-white/5">
+        <Toggle
+          checked={hasCommission}
+          onChange={setHasCommission}
+          label="Tem comissão"
+          hint="Um valor a mais, por cima do que a pessoa recebe. Aparece em roxo na barra de quem recebe."
+        />
+        {hasCommission && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label>Valor da comissão</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={commission}
+                onChange={(e) => setCommission(e.target.value)}
+                placeholder="Ex: 300"
+              />
+            </div>
+            <div>
+              <Label>Fica com</Label>
+              <Select value={commissionTo} onChange={(e) => setCommissionTo(Number(e.target.value))}>
+                {participants.map((p, i) => (
+                  <option key={i} value={i}>
+                    {p.name.trim() || `Pessoa ${i + 1}`}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        )}
+
+        <div className="border-t border-slate-100 pt-3 dark:border-white/5">
+          <LoanBars people={withCommission} />
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-sm">
           <div>
-            <p className="text-xs text-slate-400">Somado dos participantes</p>
+            <p className="text-xs text-slate-400">Somado do que emprestaram</p>
             <p
               className={clsx(
                 "font-semibold",
-                mismatch
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-slate-800 dark:text-slate-100"
+                mismatch ? "text-amber-600 dark:text-amber-400" : "text-slate-800 dark:text-slate-100"
               )}
             >
               {formatCurrency(totalContributed)}
@@ -293,7 +290,7 @@ export function LoanForm({
         </div>
         {mismatch && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            A soma dos participantes ({formatCurrency(totalContributed)}) está diferente do valor
+            A soma do que emprestaram ({formatCurrency(totalContributed)}) está diferente do valor
             emprestado ({formatCurrency(loanAmount)}). Só um aviso — dá para salvar assim mesmo.
           </p>
         )}

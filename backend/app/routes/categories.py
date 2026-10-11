@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 
 from app.extensions import db
 from app.models.category import CATEGORY_TYPES, Category
-from app.utils.parse import color
+from app.utils.parse import color, text
 
 categories_bp = Blueprint("categories", __name__)
 
@@ -20,7 +20,7 @@ def list_categories():
 @categories_bp.post("")
 def create_category():
     data = request.get_json(silent=True) or {}
-    name = (data.get("name") or "").strip()
+    name = text(data.get("name"), "name")
     if not name:
         return jsonify({"error": "O campo 'name' é obrigatório"}), 400
 
@@ -45,7 +45,7 @@ def update_category(category_id):
     data = request.get_json(silent=True) or {}
 
     if "name" in data:
-        name = (data.get("name") or "").strip()
+        name = text(data.get("name"), "name")
         if not name:
             return jsonify({"error": "O campo 'name' não pode ser vazio"}), 400
         category.name = name

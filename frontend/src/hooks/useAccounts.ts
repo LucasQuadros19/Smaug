@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { accountsApi, type AccountInput } from "../api/accounts"
 
 export function useAccounts() {
-  return useQuery({ queryKey: ["accounts"], queryFn: accountsApi.list })
+  return useQuery({ queryKey: ["accounts"], queryFn: () => accountsApi.list() })
+}
+
+/** Saldo de cada conta no fim do dia `date`. */
+export function useAccountsAt(date: string) {
+  return useQuery({ queryKey: ["accounts", "as_of", date], queryFn: () => accountsApi.list(date), enabled: Boolean(date) })
 }
 
 export function useAccountMutations() {

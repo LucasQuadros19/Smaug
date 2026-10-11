@@ -1,5 +1,6 @@
 from app.models.account import Account
 from app.models.budget import Budget
+from app.models.calendar_event import CalendarEvent
 from app.models.category import Category
 from app.models.goal import Goal
 from app.models.loan import Loan, LoanParticipant
@@ -33,4 +34,5 @@ __all__ = [
     "MarketTrade",
     "User",
     "Share",
+    "CalendarEvent",
 ]

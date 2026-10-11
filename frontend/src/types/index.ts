@@ -257,6 +257,8 @@ export interface LoanParticipant {
   name: string
   contributed: number
   to_receive: number
+  /** Comissão dessa pessoa, por cima do que ela recebe. */
+  commission: number
   is_me: boolean
 }
 
@@ -278,9 +280,7 @@ export interface Loan {
   borrower: string
   amount: number
   interest_rate: number | null
-  /** % do lucro que fica comigo por intermediar. */
-  commission_rate: number | null
-  /** Comissão em reais: commission_rate × lucro. */
+  /** Soma das comissões digitadas nos participantes. */
   commission: number
   /** Total a receber − total que entrou. */
   profit: number
@@ -475,4 +475,31 @@ export interface PortfolioPoint {
   date: string
   value: number
   invested: number
+}
+
+export type CalendarKind = "bill" | "income" | "loan" | "expectation" | "goal" | "event"
+
+export interface CalendarEvent {
+  id: number
+  title: string
+  date: string
+  amount: number | null
+  /** "in" entra dinheiro, "out" sai; null é só lembrete. */
+  direction: "in" | "out" | null
+  color: string
+  notes: string | null
+}
+
+export interface CalendarItem {
+  key: string
+  kind: CalendarKind
+  date: string
+  title: string
+  amount: number | null
+  direction: "in" | "out" | null
+  /** done = já aconteceu (pago/recebido); overdue = passou e não foi lançado. */
+  status: "done" | "overdue" | "postponed" | null
+  link: string | null
+  /** Só nos eventos livres: para editar. */
+  event?: CalendarEvent
 }

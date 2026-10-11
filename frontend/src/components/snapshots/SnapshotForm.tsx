@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Button } from "../ui/Button"
 import { Input, Label } from "../ui/Input"
+import { useAccountsAt } from "../../hooks/useAccounts"
 import { formatCurrency, formatRate, todayISO } from "../../lib/format"
 import type { Account, Playlist } from "../../types"
 import type { SnapshotInput } from "../../api/snapshots"
@@ -27,9 +28,22 @@ export function SnapshotForm({
     // automática mostra o valor que vem da origem (Empréstimos).
     for (const p of positions)
       initial[`p${p.id}`] = String(p.auto_source ? p.opening_value : p.native_value)
-    for (const a of accounts) initial[`a${a.id}`] = String(a.balance ?? 0)
     return initial
   })
+
+  // Contas vêm com o saldo do dia escolhido: registrar o passado não pode
+  // apagar o que entrou e saiu depois. Trocar a data recarrega esses saldos.
+  const balancesAt = useAccountsAt(date)
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  if (balancesAt.data && loadedFor !== date) {
+    setLoadedFor(date)
+    setValues((prev) => {
+      const next = { ...prev }
+      for (const a of balancesAt.data) next[`a${a.id}`] = String(a.balance ?? 0)
+      return next
+    })
+  }
+  const balancesReady = loadedFor === date
 
   const setValue = (key: string, value: string) =>
     setValues((prev) => ({ ...prev, [key]: value }))
@@ -61,9 +75,12 @@ export function SnapshotForm({
       className="space-y-4"
     >
       <p className="text-xs text-slate-400">
-        Os valores vêm preenchidos com o estado atual. Ajuste o que mudou e salve — vira uma
-        linha nova no histórico e atualiza o patrimônio.
+        As posições vêm com o valor atual e as contas com o saldo do dia escolhido. Ajuste o que
+        mudou e salve — vira uma linha nova no histórico e atualiza o patrimônio.
       </p>
+      {balancesAt.isError && (
+        <p className="text-xs text-rose-500">Não deu para carregar os saldos desse dia. Tente de novo.</p>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -116,7 +133,7 @@ export function SnapshotForm({
 
       <div className="space-y-3 rounded-xl border border-slate-100 p-3 dark:border-white/5">
         <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-          Dinheiro disponível
+          Dinheiro disponível {date !== todayISO() && "nesse dia"}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {accounts.map((account) => (
@@ -127,6 +144,7 @@ export function SnapshotForm({
                 step="0.01"
                 value={values[`a${account.id}`] ?? ""}
                 onChange={(e) => setValue(`a${account.id}`, e.target.value)}
+                disabled={!balancesReady}
               />
             </div>
           ))}
@@ -165,7 +183,7 @@ export function SnapshotForm({
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || !balancesReady}>
           Salvar registro
         </Button>
       </div>

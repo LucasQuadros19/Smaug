@@ -123,3 +123,22 @@ def test_composicao_usa_o_valor_dos_emprestimos(client, make_account, make_posit
     )
     allocation = summary()["allocation"]
     assert {"label": "empréstimo", "value": 1000.0, "group": "Ativos", "icon": "📁"} in allocation
+
+
+@pytest.mark.parametrize(
+    "url, body",
+    [
+        ("/api/accounts", {"name": True}),
+        ("/api/categories", {"name": ["x"], "type": "expense"}),
+        ("/api/loans", {"borrower": "z", "start_date": "2026-10-01", "participants": "x"}),
+        ("/api/budgets", {"category_id": [], "limit_amount": 10, "month": "2026-10"}),
+        ("/api/budgets", {"category_id": 10**30, "limit_amount": 10, "month": "2026-10"}),
+    ],
+)
+def test_tipo_errado_e_400_e_nao_500(client, url, body):
+    assert client.post(url, json=body).status_code == 400
+
+
+def test_nota_que_nao_e_texto_e_400(client, make_account):
+    conta = make_account()
+    assert _tx(client, conta, notes=["x"]).status_code == 400

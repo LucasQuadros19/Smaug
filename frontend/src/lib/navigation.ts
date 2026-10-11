@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   Table2,
   HandCoins,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react"
 import type { ShareSection } from "../types"
@@ -26,8 +27,11 @@ export const SHARE_SECTIONS: { key: ShareSection; label: string; hint: string }[
   { key: "calculos", label: "Cálculos", hint: "As folhas de cálculo" },
 ]
 
-/** "tudo": só com todas as partes compartilhadas. null: nunca aparece nos dados de outra pessoa. */
-type TabSection = ShareSection | "tudo" | null
+/**
+ * "tudo": só com todas as partes compartilhadas. "alguma": com qualquer parte (a
+ * tela mostra só o que foi compartilhado). null: nunca aparece nos dados de outra pessoa.
+ */
+type TabSection = ShareSection | "tudo" | "alguma" | null
 
 /** As abas da barra lateral. Todas podem ser escondidas em Configurações, menos o Dashboard. */
 export const navSections: { title: string | null; links: { to: string; label: string; icon: LucideIcon; section: TabSection }[] }[] = [
@@ -38,6 +42,7 @@ export const navSections: { title: string | null; links: { to: string; label: st
   {
     title: "Dia a dia",
     links: [
+      { to: "/calendario", label: "Calendário", icon: CalendarDays, section: "alguma" },
       { to: "/transacoes", label: "Transações", icon: ArrowLeftRight, section: "contas" },
       { to: "/recorrentes", label: "Recorrentes", icon: Repeat, section: "contas" },
       { to: "/orcamentos", label: "Orçamentos", icon: PiggyBank, section: "contas" },
@@ -68,6 +73,7 @@ export const navSections: { title: string | null; links: { to: string; label: st
 
 export function canSee(section: TabSection, shared: ShareSection[]) {
   if (section === "tudo") return SHARE_SECTIONS.every(({ key }) => shared.includes(key))
+  if (section === "alguma") return shared.length > 0
   return section !== null && shared.includes(section)
 }
 

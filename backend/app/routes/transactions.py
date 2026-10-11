@@ -9,10 +9,28 @@ from app.models.account import Account
 from app.models.category import Category
 from app.models.transaction import TRANSACTION_TYPES, Transaction
 from app.utils.pagination import paginate
-from app.utils.parse import iso_date, money
+from app.utils.parse import find, iso_date, money, text
 
 transactions_bp = Blueprint("transactions", __name__)
 
+# O que mexe no dinheiro. Num lançamento gerado por outra tela, mudar isso
+# desencontra o caixa do registro de origem; descrição, categoria e nota podem.
+_MONEY_FIELDS = ("account_id", "amount", "type", "date", "playlist_id")
+
+
+def _generated_by(transaction_id):
+    """De onde veio o lançamento, se foi criado por outra tela. None se foi digitado."""
+    from app.models.loan import LoanRepayment
+    from app.models.market import MarketTrade
+
+    if LoanRepayment.query.filter(
+        (LoanRepayment.transaction_id == transaction_id)
+        | (LoanRepayment.partner_transaction_id == transaction_id)
+    ).first():
+        return "de um recebimento de empréstimo. Desfaça por lá, na tela de Empréstimos"
+    if MarketTrade.query.filter_by(transaction_id=transaction_id).first():
+        return "de uma compra ou venda no Mercado. Desfaça por lá"
+    return None
 
 
 def _eager():
@@ -119,12 +137,12 @@ def list_transactions():
 def create_transaction():
     data = request.get_json(silent=True) or {}
 
-    description = (data.get("description") or "").strip()
+    description = text(data.get("description"), "description")
     if not description:
         return jsonify({"error": "O campo 'description' é obrigatório"}), 400
 
     account_id = data.get("account_id")
-    if not account_id or not db.session.get(Account, account_id):
+    if not account_id or not find(Account, account_id):
         return jsonify({"error": "account_id inválido"}), 400
 
     tx_type = data.get("type")
@@ -153,14 +171,15 @@ def create_transaction():
 def update_transaction(transaction_id):
     transaction = db.get_or_404(Transaction, transaction_id)
     data = request.get_json(silent=True) or {}
+    before = [getattr(transaction, field) for field in _MONEY_FIELDS]
 
     if "description" in data:
-        description = (data.get("description") or "").strip()
+        description = text(data.get("description"), "description")
         if not description:
             return jsonify({"error": "O campo 'description' não pode ser vazio"}), 400
         transaction.description = description
     if "account_id" in data:
-        if not db.session.get(Account, data["account_id"]):
+        if not find(Account, data["account_id"]):
             return jsonify({"error": "account_id inválido"}), 400
         transaction.account_id = data["account_id"]
     if "category_id" in data:
@@ -178,37 +197,25 @@ def update_transaction(transaction_id):
     if "notes" in data:
         transaction.notes = data["notes"]
 
+    if [getattr(transaction, field) for field in _MONEY_FIELDS] != before:
+        origin = _generated_by(transaction_id)
+        if origin:
+            db.session.rollback()
+            return jsonify({"error": f"Esse lançamento veio {origin}, para tudo ficar consistente."}), 400
+
     db.session.commit()
     return jsonify(transaction.to_dict())
 
 
 @transactions_bp.delete("/<int:transaction_id>")
 def delete_transaction(transaction_id):
-    from app.models.loan import LoanRepayment
-
     transaction = db.get_or_404(Transaction, transaction_id)
 
-    # Lançamentos gerados por um recebimento de empréstimo não podem ser
-    # apagados soltos: o dinheiro sairia do caixa mas o recebimento continuaria
-    # abatendo o empréstimo, e o valor sumiria sem rastro.
-    linked = LoanRepayment.query.filter(
-        (LoanRepayment.transaction_id == transaction_id)
-        | (LoanRepayment.partner_transaction_id == transaction_id)
-    ).first()
-    if linked:
-        return jsonify(
-            {
-                "error": (
-                    "Esse lançamento veio de um recebimento de empréstimo. "
-                    "Desfaça por lá, na tela de Empréstimos, para tudo ficar consistente."
-                )
-            }
-        ), 400
-
-    from app.models.market import MarketTrade
-
-    if MarketTrade.query.filter_by(transaction_id=transaction_id).first():
-        return jsonify({"error": "Esse lançamento veio de uma compra ou venda no Mercado. Apague por lá."}), 400
+    # Apagar solto tiraria o dinheiro do caixa e o registro de origem
+    # continuaria contando, e o valor sumiria sem rastro.
+    origin = _generated_by(transaction_id)
+    if origin:
+        return jsonify({"error": f"Esse lançamento veio {origin}, para tudo ficar consistente."}), 400
 
     db.session.delete(transaction)
     db.session.commit()

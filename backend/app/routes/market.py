@@ -17,7 +17,7 @@ from app.models.transaction import Transaction
 from app.services import market_service
 from app.services.market_service import MarketError
 from app.services.rates import rate
-from app.utils.parse import iso_date, money
+from app.utils.parse import find, iso_date, money, text
 
 market_bp = Blueprint("market", __name__)
 
@@ -143,7 +143,7 @@ def delete_symbol(symbol_id):
 @market_bp.post("/trades")
 def add_trade():
     data = request.get_json(silent=True) or {}
-    symbol = db.session.get(MarketSymbol, data.get("symbol_id"))
+    symbol = find(MarketSymbol, data.get("symbol_id"))
     if not symbol:
         return jsonify({"error": "Código não encontrado"}), 400
     side = data.get("side")
@@ -166,12 +166,12 @@ def add_trade():
         quantity=quantity,
         price=price,
         fx_rate=fx,
-        notes=(data.get("notes") or "").strip() or None,
+        notes=text(data.get("notes"), "notes") or None,
     )
 
     # Conta é opcional: sem ela, a compra só fica registrada aqui.
     if data.get("account_id"):
-        account = db.session.get(Account, data["account_id"])
+        account = find(Account, data["account_id"])
         if not account:
             return jsonify({"error": "Conta não encontrada"}), 400
         verb = "Compra" if side == "buy" else "Venda"

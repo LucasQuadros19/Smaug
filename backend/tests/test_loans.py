@@ -204,34 +204,52 @@ def test_partes_maiores_que_o_recebido_sao_recusadas(client, loan_setup):
     assert "passar do valor recebido" in response.get_json()["error"]
 
 
-# --- comissão: dinheiro de outros, uma parte do lucro fica comigo ----------
+# --- comissão: digitada à mão, de quem eu escolher ------------------------
 
 
 @pytest.fixture
 def comissao(client, make_account):
-    """João põe 10k, devolve 11k; eu entro com zero e fico com 30% do lucro."""
+    """João põe 10k e recebe 10,7k; eu entro com zero e fico com 300 de comissão."""
     conta = make_account(initial=0)
     loan = client.post(
         "/api/loans",
         json={
             "borrower": "Pedro",
             "amount": 10_000,
-            "commission_rate": 30,
             "start_date": "2026-01-10",
             "participants": [
                 {"name": "João", "contributed": 10_000, "to_receive": 10_700, "is_me": False},
-                {"name": "Eu", "contributed": 0, "to_receive": 300, "is_me": True},
+                {"name": "Eu", "contributed": 0, "to_receive": 0, "commission": 300, "is_me": True},
             ],
         },
     ).get_json()
     return conta, loan
 
 
-def test_comissao_e_parte_do_lucro(comissao):
+def test_comissao_entra_no_total_a_receber(comissao):
     _, loan = comissao
+    assert loan["total_to_receive"] == 11_000
     assert loan["profit"] == 1_000
     assert loan["commission"] == 300
+    assert loan["my_to_receive"] == 300
     assert loan["my_outstanding"] == 0  # não pus dinheiro: nada meu na rua
+
+
+def test_comissao_de_outra_pessoa_nao_e_minha(client):
+    loan = client.post(
+        "/api/loans",
+        json={
+            "borrower": "Pedro",
+            "amount": 1_000,
+            "start_date": "2026-01-10",
+            "participants": [
+                {"name": "Eu", "contributed": 1_000, "to_receive": 1_050, "is_me": True},
+                {"name": "Ana", "contributed": 0, "to_receive": 0, "commission": 50, "is_me": False},
+            ],
+        },
+    ).get_json()
+    assert loan["my_to_receive"] == 1_050
+    assert loan["total_to_receive"] == 1_100
 
 
 def test_so_comissao_nao_quita_antes_de_eu_receber(client, comissao):
@@ -250,9 +268,28 @@ def test_so_comissao_nao_quita_antes_de_eu_receber(client, comissao):
     assert final["status"] == "paid"
 
 
-def test_comissao_fora_de_0_a_100_e_recusada(client):
+def test_comissao_negativa_e_recusada(client):
     response = client.post(
         "/api/loans",
-        json={"borrower": "X", "amount": 1, "commission_rate": 150, "start_date": "2026-01-10"},
+        json={
+            "borrower": "X",
+            "amount": 1,
+            "start_date": "2026-01-10",
+            "participants": [{"name": "Eu", "contributed": 1, "to_receive": 1, "commission": -5, "is_me": True}],
+        },
     )
     assert response.status_code == 400
+
+
+def test_lancamento_do_recebimento_nao_muda_de_valor_solto(client, loan_setup):
+    """Regressão: editar o valor por Transações desencontrava caixa e empréstimo."""
+    conta, _, loan_id = loan_setup
+    client.post(f"/api/loans/{loan_id}/repayments", json={"account_id": conta.id, "amount": 1_000})
+    lancamento = client.get("/api/transactions").get_json()["items"][0]
+
+    valor = client.put(f"/api/transactions/{lancamento['id']}", json={"amount": 50})
+    descricao = client.put(f"/api/transactions/{lancamento['id']}", json={**lancamento, "description": "Parcela 1"})
+
+    assert valor.status_code == 400
+    assert descricao.status_code == 200
+    assert client.get("/api/transactions").get_json()["items"][0]["amount"] == 1_000

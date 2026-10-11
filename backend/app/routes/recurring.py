@@ -9,7 +9,7 @@ from app.models.account import Account
 from app.models.recurring import RECURRING_FREQUENCIES, RecurringTransaction
 from app.models.transaction import TRANSACTION_TYPES, Transaction
 from app.services.recurring_service import advance, generate_due_transactions
-from app.utils.parse import money
+from app.utils.parse import find, money, text
 
 recurring_bp = Blueprint("recurring", __name__)
 
@@ -38,12 +38,12 @@ def list_recurring():
 def create_recurring():
     data = request.get_json(silent=True) or {}
 
-    description = (data.get("description") or "").strip()
+    description = text(data.get("description"), "description")
     if not description:
         return jsonify({"error": "O campo 'description' é obrigatório"}), 400
 
     account_id = data.get("account_id")
-    if not account_id or not db.session.get(Account, account_id):
+    if not account_id or not find(Account, account_id):
         return jsonify({"error": "account_id inválido"}), 400
 
     tx_type = data.get("type")
@@ -71,6 +71,7 @@ def create_recurring():
         type=tx_type,
         frequency=frequency,
         next_due_date=next_due_date,
+        due_day=next_due_date.day,
         active=data.get("active", True),
         auto=data.get("auto", True),
     )
@@ -85,12 +86,12 @@ def update_recurring(item_id):
     data = request.get_json(silent=True) or {}
 
     if "description" in data:
-        description = (data.get("description") or "").strip()
+        description = text(data.get("description"), "description")
         if not description:
             return jsonify({"error": "O campo 'description' não pode ser vazio"}), 400
         item.description = description
     if "account_id" in data:
-        if not db.session.get(Account, data["account_id"]):
+        if not find(Account, data["account_id"]):
             return jsonify({"error": "account_id inválido"}), 400
         item.account_id = data["account_id"]
     if "category_id" in data:
@@ -111,9 +112,12 @@ def update_recurring(item_id):
         parsed, erro = _parse_date(data["next_due_date"])
         if erro:
             return jsonify({"error": erro}), 400
-        item.next_due_date = parsed
-        # Mudou a data à mão: o adiamento antigo deixa de fazer sentido.
-        item.postponed_until = None
+        # O formulário sempre manda a data: só conta se mudou de verdade.
+        if parsed != item.next_due_date:
+            item.next_due_date = parsed
+            item.due_day = parsed.day
+            # Mudou a data à mão: o adiamento antigo deixa de fazer sentido.
+            item.postponed_until = None
     if "active" in data:
         item.active = bool(data["active"])
     if "auto" in data:
@@ -160,6 +164,7 @@ def launch_recurring(item_id):
         account_id=item.account_id,
         category_id=item.category_id,
         playlist_id=item.playlist_id,
+        recurring_id=item.id,
         description=item.description,
         amount=amount,
         type=item.type,

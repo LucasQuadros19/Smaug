@@ -2,7 +2,7 @@
 
 Sistema de finanças pessoais que roda na própria máquina ou na rede de casa.
 
-Guarda contas, transações, recorrências, orçamentos, metas e empréstimos (inclusive com sócios e comissão), e acompanha o patrimônio ao longo do tempo. Tem também uma área de cálculos e uma aba de mercado para ações e cripto, que ainda está em teste e não entra no patrimônio.
+Guarda contas, transações, recorrências, orçamentos, metas e empréstimos (inclusive com sócios e comissão), e acompanha o patrimônio ao longo do tempo. Um calendário junta num mês só as contas e salários (pagos e previstos), os empréstimos, as previsões dos ativos, os prazos das metas e eventos próprios. Tem também uma área de cálculos e uma aba de mercado para ações e cripto, que ainda está em teste e não entra no patrimônio.
 
 Backend em Flask com PostgreSQL, frontend em React com Vite.
 

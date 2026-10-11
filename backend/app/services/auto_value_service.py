@@ -15,19 +15,14 @@ from app.models.loan import Loan
 OPEN_LOAN_STATUSES = ("active", "late")
 
 
-def _open_loans():
-    return (
-        Loan.query.options(
-            selectinload(Loan.participants), selectinload(Loan.repayments)
-        )
+def loans_total() -> Decimal:
+    """Meu dinheiro ainda na rua: principal meu menos o que já voltou."""
+    loans = (
+        Loan.query.options(selectinload(Loan.participants), selectinload(Loan.repayments))
         .filter(Loan.status.in_(OPEN_LOAN_STATUSES))
         .all()
     )
-
-
-def loans_total() -> Decimal:
-    """Meu dinheiro ainda na rua: principal meu menos o que já voltou."""
-    return sum((loan.my_outstanding for loan in _open_loans()), Decimal(0))
+    return sum((loan.my_outstanding for loan in loans), Decimal(0))
 
 
 def pending_to_partners() -> Decimal:

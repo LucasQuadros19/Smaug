@@ -19,9 +19,6 @@ class Loan(Owned, db.Model):
     borrower = db.Column(db.String(120), nullable=False)
     amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     interest_rate = db.Column(db.Numeric(6, 2), nullable=True)
-    # Quando você empresta dinheiro de outros e fica com uma parte do lucro.
-    # Em % do lucro total (o que volta a mais do que saiu).
-    commission_rate = db.Column(db.Numeric(5, 2), nullable=True)
     start_date = db.Column(db.Date, nullable=False)
     due_date = db.Column(db.Date, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="active")
@@ -65,17 +62,24 @@ class Loan(Owned, db.Model):
         return max(self.my_principal - self.my_repaid, Decimal(0))
 
     @property
-    def profit(self) -> Decimal:
-        """O que a pessoa devolve a mais do que pegou, pelo digitado nos participantes."""
-        received = sum((Decimal(p.to_receive or 0) for p in self.participants), Decimal(0))
-        contributed = sum((Decimal(p.contributed or 0) for p in self.participants), Decimal(0))
-        return max(received - contributed, Decimal(0))
+    def commission(self) -> Decimal:
+        """Comissão digitada à mão, de quem ela for. Fica fora do "recebe" da pessoa."""
+        return sum((Decimal(p.commission or 0) for p in self.participants), Decimal(0))
 
     @property
-    def commission(self) -> Decimal:
-        if not self.commission_rate:
-            return Decimal(0)
-        return (self.profit * Decimal(self.commission_rate) / 100).quantize(Decimal("0.01"))
+    def total_to_receive(self) -> Decimal:
+        """Tudo o que volta: o "recebe" de cada um mais a comissão."""
+        return sum((p.total_to_receive for p in self.participants), Decimal(0))
+
+    @property
+    def profit(self) -> Decimal:
+        """O que a pessoa devolve a mais do que pegou, pelo digitado nos participantes."""
+        contributed = sum((Decimal(p.contributed or 0) for p in self.participants), Decimal(0))
+        return max(self.total_to_receive - contributed, Decimal(0))
+
+    @property
+    def my_to_receive(self) -> Decimal:
+        return sum((p.total_to_receive for p in self.participants if p.is_me), Decimal(0))
 
     @property
     def mine_is_back(self) -> bool:
@@ -83,10 +87,7 @@ class Loan(Owned, db.Model):
         comissão (entrei com zero), é o que eu tenho a receber."""
         if self.my_principal > 0:
             return self.my_outstanding <= 0
-        my_to_receive = sum(
-            (Decimal(p.to_receive or 0) for p in self.participants if p.is_me), Decimal(0)
-        )
-        return self.my_repaid >= my_to_receive
+        return self.my_repaid >= self.my_to_receive
 
     @property
     def pending_to_partners(self) -> Decimal:
@@ -102,14 +103,12 @@ class Loan(Owned, db.Model):
     def to_dict(self):
         participants = sorted(self.participants, key=lambda p: (not p.is_me, p.id))
         contributed = sum(float(p.contributed or 0) for p in participants)
-        to_receive = sum(float(p.to_receive or 0) for p in participants)
         mine = next((p for p in participants if p.is_me), None)
         return {
             "id": self.id,
             "borrower": self.borrower,
             "amount": float(self.amount or 0),
             "interest_rate": float(self.interest_rate) if self.interest_rate is not None else None,
-            "commission_rate": float(self.commission_rate) if self.commission_rate is not None else None,
             "commission": float(self.commission),
             "profit": float(self.profit),
             "start_date": self.start_date.isoformat() if self.start_date else None,
@@ -121,9 +120,9 @@ class Loan(Owned, db.Model):
             # Somatórios apenas para conferência visual — não substituem os
             # valores digitados, servem para o usuário notar divergências.
             "total_contributed": contributed,
-            "total_to_receive": to_receive,
+            "total_to_receive": float(self.total_to_receive),
             "my_contributed": float(mine.contributed or 0) if mine else None,
-            "my_to_receive": float(mine.to_receive or 0) if mine else None,
+            "my_to_receive": float(self.my_to_receive) if mine else None,
             "my_principal": float(self.my_principal),
             "my_repaid": float(self.my_repaid),
             "my_outstanding": float(self.my_outstanding),
@@ -145,7 +144,13 @@ class LoanParticipant(Owned, db.Model):
     name = db.Column(db.String(120), nullable=False)
     contributed = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     to_receive = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    # Comissão que essa pessoa ganha por cima do que recebe. Digitada à mão.
+    commission = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
     is_me = db.Column(db.Boolean, nullable=False, default=False)
+
+    @property
+    def total_to_receive(self) -> Decimal:
+        return Decimal(self.to_receive or 0) + Decimal(self.commission or 0)
 
     def to_dict(self):
         return {
@@ -154,6 +159,7 @@ class LoanParticipant(Owned, db.Model):
             "name": self.name,
             "contributed": float(self.contributed or 0),
             "to_receive": float(self.to_receive or 0),
+            "commission": float(self.commission or 0),
             "is_me": self.is_me,
         }
 

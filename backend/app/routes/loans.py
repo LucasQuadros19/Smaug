@@ -1,38 +1,26 @@
-from decimal import Decimal, InvalidOperation
+from datetime import date
+from decimal import Decimal
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy.orm import selectinload
+from werkzeug.exceptions import BadRequest
 
 from app.extensions import db
 from app.models.loan import LOAN_STATUSES, Loan, LoanParticipant, LoanRepayment
-from app.utils.parse import iso_date, money
+from app.utils.parse import find, iso_date, money, text
 
 loans_bp = Blueprint("loans", __name__)
 
 
 
-def _today():
-    from datetime import date
-
-    return date.today()
-
-
-def _invalid_commission(value):
-    """0 a 100, ou vazio."""
-    if value in (None, ""):
-        return None
-    try:
-        rate = Decimal(str(value))
-    except InvalidOperation:
-        return "commission_rate inválido"
-    return None if 0 <= rate <= 100 else "commission_rate deve estar entre 0 e 100"
-
-
 def _replace_participants(loan, raw_participants):
     """Troca a lista inteira — mais simples e previsível que diff item a item."""
+    raw_participants = raw_participants or []
+    if not isinstance(raw_participants, list) or not all(isinstance(raw, dict) for raw in raw_participants):
+        raise BadRequest("participants deve ser uma lista de participantes")
     loan.participants.clear()
-    for raw in raw_participants or []:
-        name = (raw.get("name") or "").strip()
+    for raw in raw_participants:
+        name = text(raw.get("name"), "name")
         if not name:
             continue
         loan.participants.append(
@@ -40,6 +28,7 @@ def _replace_participants(loan, raw_participants):
                 name=name,
                 contributed=money(raw.get("contributed"), "contributed", allow_zero=True, required=False) or 0,
                 to_receive=money(raw.get("to_receive"), "to_receive", allow_zero=True, required=False) or 0,
+                commission=money(raw.get("commission"), "commission", allow_zero=True, required=False) or 0,
                 is_me=bool(raw.get("is_me")),
             )
         )
@@ -61,7 +50,7 @@ def list_loans():
 def create_loan():
     data = request.get_json(silent=True) or {}
 
-    borrower = (data.get("borrower") or "").strip()
+    borrower = text(data.get("borrower"), "borrower")
     if not borrower:
         return jsonify({"error": "O campo 'borrower' é obrigatório"}), 400
 
@@ -72,19 +61,15 @@ def create_loan():
     status = data.get("status", "active")
     if status not in LOAN_STATUSES:
         return jsonify({"error": f"status deve ser um de {LOAN_STATUSES}"}), 400
-    erro = _invalid_commission(data.get("commission_rate"))
-    if erro:
-        return jsonify({"error": erro}), 400
 
     loan = Loan(
         borrower=borrower,
         amount=money(data.get("amount"), "amount", allow_zero=True, required=False) or 0,
         interest_rate=money(data.get("interest_rate"), "interest_rate", allow_zero=True, required=False),
-        commission_rate=data.get("commission_rate"),
         start_date=iso_date(start_date, "start_date"),
         due_date=iso_date(data.get("due_date"), "due_date", required=False),
         status=status,
-        notes=(data.get("notes") or "").strip() or None,
+        notes=text(data.get("notes"), "notes") or None,
     )
     _replace_participants(loan, data.get("participants"))
     db.session.add(loan)
@@ -98,7 +83,7 @@ def update_loan(loan_id):
     data = request.get_json(silent=True) or {}
 
     if "borrower" in data:
-        borrower = (data.get("borrower") or "").strip()
+        borrower = text(data.get("borrower"), "borrower")
         if not borrower:
             return jsonify({"error": "O campo 'borrower' não pode ser vazio"}), 400
         loan.borrower = borrower
@@ -106,11 +91,6 @@ def update_loan(loan_id):
         loan.amount = money(data["amount"], "amount", allow_zero=True, required=False) or 0
     if "interest_rate" in data:
         loan.interest_rate = money(data["interest_rate"], "interest_rate", allow_zero=True, required=False)
-    if "commission_rate" in data:
-        erro = _invalid_commission(data["commission_rate"])
-        if erro:
-            return jsonify({"error": erro}), 400
-        loan.commission_rate = data["commission_rate"] if data["commission_rate"] != "" else None
     if "start_date" in data:
         loan.start_date = iso_date(data["start_date"], "start_date")
     if "due_date" in data:
@@ -120,7 +100,7 @@ def update_loan(loan_id):
             return jsonify({"error": f"status deve ser um de {LOAN_STATUSES}"}), 400
         loan.status = data["status"]
     if "notes" in data:
-        loan.notes = (data.get("notes") or "").strip() or None
+        loan.notes = text(data.get("notes"), "notes") or None
     if "participants" in data:
         _replace_participants(loan, data["participants"])
 
@@ -160,7 +140,7 @@ def _register_repayment(loan, data):
     from app.models.account import Account
     from app.models.transaction import Transaction
 
-    account = db.session.get(Account, data.get("account_id"))
+    account = find(Account, data.get("account_id"))
     if not account:
         return None, ("Informe a conta que recebeu o dinheiro", 400)
 
@@ -175,13 +155,13 @@ def _register_repayment(loan, data):
 
     repayment = LoanRepayment(
         loan_id=loan.id,
-        date=iso_date(data.get("date"), "date", required=False) or _today(),
+        date=iso_date(data.get("date"), "date", required=False) or date.today(),
         amount=amount,
         my_share=my_share,
         partners_share=partners_share,
         account_id=account.id,
         partners_settled=settled,
-        notes=(data.get("notes") or "").strip() or None,
+        notes=text(data.get("notes"), "notes") or None,
     )
     db.session.add(repayment)
     db.session.flush()

@@ -119,3 +119,23 @@ def test_lancamento_recusa_valor_invalido(client, criar):
     assert client.post(f"/api/recurring/{item['id']}/launch", json={"amount": 0}).status_code == 400
     assert client.post(f"/api/recurring/{item['id']}/launch", json={"amount": -5}).status_code == 400
     assert client.get("/api/transactions").get_json()["total"] == 0
+
+
+def test_dia_31_volta_ao_31_depois_de_fevereiro(client, criar):
+    """Regressão: depois de fevereiro o vencimento ficava no dia 28 para sempre."""
+    item = criar(auto=False, vencimento=date(2027, 1, 31))
+    datas = []
+    for _ in range(3):
+        datas.append(client.post(f"/api/recurring/{item['id']}/launch", json={}).get_json()["recurring"]["next_due_date"])
+    assert datas == ["2027-02-28", "2027-03-31", "2027-04-30"]
+
+
+def test_editar_o_valor_nao_desfaz_o_adiamento(client, criar):
+    """O formulário sempre reenvia a data; sem mudança nela, o adiamento fica."""
+    item = criar(auto=False, vencimento=date.today() + timedelta(days=3))
+    adiado = (date.today() + timedelta(days=10)).isoformat()
+    client.post(f"/api/recurring/{item['id']}/postpone", json={"until": adiado})
+
+    response = client.put(f"/api/recurring/{item['id']}", json={"amount": 300, "next_due_date": item["next_due_date"]})
+
+    assert response.get_json()["postponed_until"] == adiado
