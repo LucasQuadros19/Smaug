@@ -10,7 +10,7 @@ export type PlaylistInput = {
   counts_in_net_worth: boolean
   opening_value?: number
   currency?: Currency
-  auto_source?: string | null
+  auto_source?: "loans" | "market" | null
   asset_type?: AssetType
 }
 

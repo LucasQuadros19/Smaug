@@ -103,13 +103,25 @@ def delete_expectation(item_id):
     return "", 204
 
 
+LAUNCH_THEN = ("keep", "next", "close", "partial")
+
+
 @expectations_bp.post("/<int:item_id>/launch")
 def launch_expectation(item_id):
-    """Lança uma transação real a partir da expectativa. Pode ser chamado
-    quantas vezes for preciso — a expectativa continua ali, pronta para o
-    próximo lançamento (ex: mesma parcela todo mês)."""
+    """Lança no caixa o que chegou e diz o que acontece com a expectativa.
+
+    `then`:
+    - "next": chegou; espera de novo em `next_date` (ex: a mesma parcela todo mês);
+    - "close": chegou e acabou — sai da lista de esperados;
+    - "partial": chegou só parte; o resto continua esperado (em `next_date`, se vier);
+    - "keep" (padrão antigo): lança e deixa como estava.
+    """
     item = db.get_or_404(PlaylistExpectation, item_id)
     data = request.get_json(silent=True) or {}
+    then = data.get("then", "keep")
+    if then not in LAUNCH_THEN:
+        return jsonify({"error": f"then deve ser um de {LAUNCH_THEN}"}), 400
+    next_date = iso_date(data.get("next_date"), "next_date", required=then == "next")
 
     account_id = data.get("account_id") or item.account_id
     if not account_id or not find(Account, account_id):
@@ -129,6 +141,19 @@ def launch_expectation(item_id):
         notes=data.get("notes"),
     )
     db.session.add(transaction)
+
+    if then == "next":
+        item.expected_date = next_date
+    elif then == "close":
+        item.status = "received"
+    elif then == "partial":
+        left = item.amount - amount
+        if left <= 0:
+            item.status = "received"
+        else:
+            item.amount = left
+            if next_date:
+                item.expected_date = next_date
     db.session.commit()
 
     return jsonify({"expectation": _with_playlist(item), "transaction": transaction.to_dict()})

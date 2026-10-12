@@ -9,13 +9,16 @@ export type ShoppingItemInput = {
   notes?: string | null
 }
 
+/** Ao marcar como comprado: lança o gasto no caixa. */
+export type PurchaseLaunch = { account_id: number; amount: number; date: string; category_id?: number | null }
+
 export const shoppingItemsApi = {
   list: (playlistId?: number) =>
     api
       .get<ShoppingItem[]>("/shopping-items", { params: playlistId ? { playlist_id: playlistId } : undefined }),
   create: (data: ShoppingItemInput) =>
     api.post<ShoppingItem>("/shopping-items", data),
-  update: (id: number, data: Partial<ShoppingItemInput & { purchased: boolean }>) =>
+  update: (id: number, data: Partial<ShoppingItemInput & { purchased: boolean; launch: PurchaseLaunch }>) =>
     api.put<ShoppingItem>(`/shopping-items/${id}`, data),
   remove: (id: number) => api.delete(`/shopping-items/${id}`),
 }

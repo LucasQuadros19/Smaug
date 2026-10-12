@@ -138,8 +138,10 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
     # "Aportado" inclui o que já era seu (opening_value) mais o que saiu do caixa.
     # Em ativo de valor declarado o que sai é custo (gasolina), não aporte: só o
     # valor declarado conta, senão abastecer pareceria investir na moto.
+    # Posição ligada a outra tela: o valor já é o de lá; aportado é só o que saiu das contas.
     total_invested = sum(
-        p["opening_value"] + (0 if p["value_mode"] == "declarado" else p["total_out"])
+        p["total_out"] if p["auto_source"]
+        else p["opening_value"] + (0 if p["value_mode"] == "declarado" else p["total_out"])
         for p in asset_playlists
     )
     total_returned = sum(

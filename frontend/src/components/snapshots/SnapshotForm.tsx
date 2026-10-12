@@ -116,8 +116,10 @@ export function SnapshotForm({
                 readOnly={Boolean(position.auto_source)}
                 className={position.auto_source ? "cursor-not-allowed opacity-60" : undefined}
               />
-              {position.auto_source === "loans" && (
-                <p className="mt-1 text-[11px] text-slate-400">vem da tela de Empréstimos</p>
+              {position.auto_source && (
+                <p className="mt-1 text-[11px] text-slate-400">
+                  vem da tela de {position.auto_source === "loans" ? "Empréstimos" : "Mercado"}
+                </p>
               )}
               {position.currency !== "BRL" && (
                 <p className="mt-1 text-[11px] text-slate-400">

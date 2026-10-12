@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { authApi, type Credentials } from "../api/auth"
 import { setViewing } from "../lib/viewing"
-import type { User } from "../types"
+import type { Settings, User } from "../types"
 
 const ME = ["me"]
 
@@ -43,4 +43,22 @@ export function useHiddenTabs() {
     save.mutate(hidden_tabs)
   }
   return { set, error: save.error }
+}
+
+/** Os padrões de mercado da pessoa logada. Mudar salva na hora (em fila, na ordem). */
+export function useSettings() {
+  const client = useQueryClient()
+  const { data: user } = useMe()
+  const save = useMutation({
+    scope: { id: "settings" },
+    mutationFn: authApi.updateSettings,
+    onSuccess: (updated) => client.setQueryData(ME, updated),
+    onError: () => client.invalidateQueries({ queryKey: ME }),
+  })
+  const set = (patch: Partial<Settings>) => {
+    client.setQueryData<User | null>(ME, (current) => current && { ...current, settings: { ...current.settings, ...patch } })
+    save.mutate(patch)
+  }
+  // A tela só abre depois do login (ver App): o usuário sempre existe aqui.
+  return { settings: user!.settings, set, error: save.error }
 }

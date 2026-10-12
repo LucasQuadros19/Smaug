@@ -32,6 +32,9 @@ export function useMarketMutations() {
     queryClient.invalidateQueries({ queryKey: ["accounts"] })
     queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     queryClient.invalidateQueries({ queryKey: ["transactions"] })
+    // Comprar e vender muda o valor da posição Mercado no patrimônio.
+    queryClient.invalidateQueries({ queryKey: ["playlists"] })
+    queryClient.invalidateQueries({ queryKey: ["goals"] })
   }
 
   const addSymbol = useMutation({

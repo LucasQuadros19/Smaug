@@ -45,6 +45,13 @@ export function shiftMonth(month: string, delta: number): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
 }
 
+/** "YYYY-MM-DD" + n meses; dia 31 vira o último dia do mês quando ele não existe. */
+export function addMonths(day: string, months: number): string {
+  const [y, m, d] = day.split("-").map(Number)
+  const last = new Date(y, m - 1 + months + 1, 0).getDate()
+  return isoDate(new Date(y, m - 1 + months, Math.min(d, last)))
+}
+
 export function formatMonthLabel(month: string): string {
   const [year, m] = month.split("-").map(Number)
   const date = new Date(year, m - 1, 1)

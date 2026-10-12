@@ -84,12 +84,14 @@ export function useCalcRefs(): CalcRef[] {
       add(base, loan.amount, `emprestado para ${loan.borrower}`)
       add(`${base}.recebe`, loan.total_to_receive, `total a receber de ${loan.borrower}`)
       add(`${base}.lucro`, loan.profit, `lucro do empréstimo de ${loan.borrower}`)
+      add(`${base}.juros`, loan.monthly_interest, `juros por mês do empréstimo de ${loan.borrower}`)
       if (loan.commission > 0) add(`${base}.comissao`, loan.commission, `comissão do empréstimo de ${loan.borrower}`)
-      const usedPeople = new Set(["recebe", "lucro", "comissao"])
+      const usedPeople = new Set(["recebe", "lucro", "juros", "comissao"])
       for (const p of loan.participants) {
         const person = `${base}.${unique(slug(p.name), usedPeople)}`
         add(person, p.contributed, `${p.name} colocou`)
         add(`${person}.recebe`, p.to_receive, `${p.name} recebe`)
+        add(`${person}.ganha`, p.gain, `${p.name} ganha por mês`)
       }
     }
     if (market) {

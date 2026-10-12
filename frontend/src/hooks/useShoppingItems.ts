@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { shoppingItemsApi, type ShoppingItemInput } from "../api/shoppingItems"
+import { shoppingItemsApi, type PurchaseLaunch, type ShoppingItemInput } from "../api/shoppingItems"
 
 export function useShoppingItems(playlistId?: number) {
   return useQuery({
@@ -12,6 +12,11 @@ export function useShoppingItemMutations() {
   const queryClient = useQueryClient()
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["shopping-items"] })
+    // "Comprei" pode lançar o gasto no caixa.
+    queryClient.invalidateQueries({ queryKey: ["accounts"] })
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] })
+    queryClient.invalidateQueries({ queryKey: ["transactions"] })
+    queryClient.invalidateQueries({ queryKey: ["playlists"] })
   }
 
   const create = useMutation({
@@ -19,7 +24,7 @@ export function useShoppingItemMutations() {
     onSuccess: invalidate,
   })
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<ShoppingItemInput & { purchased: boolean }> }) =>
+    mutationFn: ({ id, data }: { id: number; data: Partial<ShoppingItemInput & { purchased: boolean; launch: PurchaseLaunch }> }) =>
       shoppingItemsApi.update(id, data),
     onSuccess: invalidate,
   })

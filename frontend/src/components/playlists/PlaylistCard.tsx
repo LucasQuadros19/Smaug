@@ -43,6 +43,7 @@ export function PlaylistCard({
               )}
               {!playlist.counts_in_net_worth && <Badge color="#64748b">Fora do patrimônio</Badge>}
               {playlist.auto_source === "loans" && <Badge color="#2a78d6">Vem dos Empréstimos</Badge>}
+              {playlist.auto_source === "market" && <Badge color="#2a78d6">Vem do Mercado</Badge>}
             </div>
             {playlist.description && (
               <p className="truncate text-xs text-slate-400">{playlist.description}</p>

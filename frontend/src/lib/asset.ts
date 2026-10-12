@@ -39,6 +39,8 @@ export function sumLiabilities(playlists: Playlist[]): number {
 
 /** Total aportado: o que já era seu mais o que saiu do caixa para cá. */
 export function getTotalInvested(playlist: Playlist): number {
+  // Ligada a outra tela: o valor já é o de lá; aportado é só o que saiu das contas para ela.
+  if (playlist.auto_source) return playlist.total_out ?? 0
   if (isDeclaredValue(playlist)) return playlist.opening_value ?? 0
   return (playlist.opening_value ?? 0) + (playlist.total_out ?? 0)
 }

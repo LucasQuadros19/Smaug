@@ -11,6 +11,7 @@ from app.extensions import db
 from app.models.account import Account
 from app.models.playlist import DECLARED_ASSET_TYPES, Playlist
 from app.models.transaction import Transaction
+from app.services.auto_value_service import auto_value_map
 
 
 def exclude_asset_moves(query):
@@ -151,6 +152,8 @@ def get_net_worth_series(reference: date, granularity: str, playlists: list):
 
     count = 12 if granularity == "weekly" else 6
     initial_total = Decimal(db.session.query(func.sum(Account.initial_balance)).scalar() or 0)
+    # Posição ligada a outra tela não tem histórico próprio: vale o de agora, como o declarado.
+    auto = auto_value_map(counting)
 
     for label, _start, end in build_periods(reference, granularity, count):
         cash = _cash_until(end, initial_total)
@@ -159,7 +162,10 @@ def get_net_worth_series(reference: date, granularity: str, playlists: list):
         point = {"period": label, "cash": float(cash), "assets": {}}
         parked_total = Decimal(0)
         for playlist in counting:
-            parked = _parked_value(playlist.opening_brl, nets.get(playlist.id, Decimal(0)), playlist.value_mode)
+            if playlist.id in auto:
+                parked = auto[playlist.id]
+            else:
+                parked = _parked_value(playlist.opening_brl, nets.get(playlist.id, Decimal(0)), playlist.value_mode)
             parked_total += parked
             if playlist.kind == "asset":
                 point["assets"][str(playlist.id)] = float(parked)

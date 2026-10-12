@@ -10,6 +10,8 @@ import { PriceChart } from "../components/market/PriceChart"
 import { Change, SymbolRow, type Money } from "../components/market/SymbolRow"
 import { useMarket, useMarketMutations, usePortfolioHistory } from "../hooks/useMarket"
 import { useAccounts } from "../hooks/useAccounts"
+import { useSettings } from "../hooks/useMe"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import { formatCurrency, formatMoney, todayISO } from "../lib/format"
 import type { MarketKind, MarketRange, MarketSymbol } from "../types"
@@ -95,7 +97,7 @@ function TradeForm({
 }: {
   symbol: MarketSymbol
   side: "buy" | "sell"
-  onSubmit: (data: { quantity: number; price: number; date: string; account_id: number | null; notes: string | null }) => void
+  onSubmit: (data: { quantity: number; price: number; date: string; account_id: number | null; fees: number; notes: string | null }) => void
   onCancel: () => void
   submitting: boolean
 }) {
@@ -106,14 +108,21 @@ function TradeForm({
   const [accountId, setAccountId] = useState(0)
   const [notes, setNotes] = useState("")
 
+  const { settings } = useSettings()
+  const [fees, setFees] = useState<string | null>(null)
   const total = (Number(quantity) || 0) * (Number(price) || 0)
+  const totalBrl = total * (symbol.rate ?? 1)
   const held = symbol.holding?.quantity ?? 0
+  // Taxas pelos padrões: corretagem por ordem + taxas da B3 (só ações da B3). Dá para mudar.
+  const b3 = symbol.kind === "stock" && symbol.currency === "BRL"
+  const suggestedFees = total > 0 ? Math.round((settings.order_fee + (b3 ? (totalBrl * settings.b3_fee) / 100 : 0)) * 100) / 100 : 0
+  const feeValue = fees === null ? suggestedFees : Number(fees) || 0
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault()
-        onSubmit({ quantity: Number(quantity), price: Number(price), date, account_id: accountId || null, notes: notes || null })
+        onSubmit({ quantity: Number(quantity), price: Number(price), date, account_id: accountId || null, fees: feeValue, notes: notes || null })
       }}
       className="space-y-4"
     >
@@ -129,6 +138,17 @@ function TradeForm({
         <div>
           <Label>Data</Label>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </div>
+        <div>
+          <Label>Taxas (R$)</Label>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={fees ?? (suggestedFees ? String(suggestedFees) : "")}
+            onChange={(e) => setFees(e.target.value)}
+            placeholder="0,00"
+          />
         </div>
         <div>
           <Label>Conta (opcional)</Label>
@@ -151,11 +171,16 @@ function TradeForm({
             <span className="ml-2 text-xs font-normal text-slate-400">≈ {formatCurrency(total * symbol.rate)}</span>
           )}
         </p>
+        {feeValue > 0 && (
+          <p className="text-xs text-slate-400">
+            {side === "buy" ? "+" : "−"} {formatCurrency(feeValue)} de taxas ={" "}
+            {formatCurrency(side === "buy" ? totalBrl + feeValue : totalBrl - feeValue)}
+          </p>
+        )}
         {accountId > 0 && (
-          <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-            {side === "buy" ? "Sai" : "Entra"} {symbol.currency !== "BRL" ? "o valor em reais " : ""}na conta e conta como{" "}
-            {side === "buy" ? "saída" : "entrada"} do mês. Enquanto o Mercado é área de teste, a ação não entra no
-            patrimônio — então uma compra faz o patrimônio cair.
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+            {side === "buy" ? "Sai da" : "Entra na"} conta e o dinheiro {side === "buy" ? "vira ação" : "volta da ação"} no
+            patrimônio — não conta como {side === "buy" ? "gasto" : "receita"} do mês.
           </p>
         )}
       </div>
@@ -225,13 +250,74 @@ function PortfolioCard({ hasTrades }: { hasTrades: boolean }) {
       <p className="text-[11px] text-slate-400">
         Linha tracejada: quanto você tinha investido. Valores em dólar usam a cotação de hoje.
       </p>
+      {data && <TaxEstimate tax={data.tax} />}
     </Card>
+  )
+}
+
+/** IR estimado do mês: só aparece quando houve venda. */
+function TaxEstimate({ tax }: { tax: NonNullable<ReturnType<typeof useMarket>["data"]>["tax"] }) {
+  const lines = [
+    { label: "Ações da B3", ...tax.stock },
+    { label: "Cripto", ...tax.crypto },
+  ].filter((line) => line.sales > 0)
+  if (lines.length === 0) return null
+  return (
+    <div className="space-y-1.5 border-t border-slate-100 pt-3 text-xs dark:border-white/5">
+      <p className="font-medium text-slate-600 dark:text-slate-300">IR estimado deste mês</p>
+      {lines.map((line) => (
+        <p key={line.label} className="text-slate-500 dark:text-slate-400">
+          {line.label}: vendeu {formatCurrency(line.sales)}, lucro {formatCurrency(line.realized)} —{" "}
+          {line.tax > 0 ? (
+            <span className="font-medium text-rose-600 dark:text-rose-400">
+              {formatCurrency(line.tax)} ({line.rate}%)
+            </span>
+          ) : line.sales <= line.exempt_until ? (
+            `isento (vendas até ${formatCurrency(line.exempt_until)})`
+          ) : (
+            "sem lucro, sem imposto"
+          )}
+        </p>
+      ))}
+      <p className="text-[11px] text-slate-400">
+        Estimativa: não compensa prejuízo de meses anteriores nem trata day trade. As taxas vêm das Configurações.
+      </p>
+    </div>
   )
 }
 
 export function Market() {
   const { data, isLoading, error } = useMarket()
   const { addTrade, removeTrade, removeSymbol } = useMarketMutations()
+  const ask = useConfirm()
+  const askRemoveTrade = (symbol: MarketSymbol, id: number) => {
+    const t = symbol.trades.find((x) => x.id === id)
+    ask({
+      title: `Apagar ${t?.side === "sell" ? "venda" : "compra"} de ${symbol.code}?`,
+      message: t ? `${t.quantity.toLocaleString("pt-BR")} × ${formatMoney(t.price, symbol.currency)} em ${t.date.split("-").reverse().join("/")}.` : "",
+      consequences: [
+        t?.account_id ? "O lançamento na conta some junto e o saldo volta." : "Não mexeu em conta: só o registro some.",
+        "A posição Mercado no patrimônio é recalculada.",
+      ],
+      action: () => removeTrade.mutateAsync(id),
+      done: "Registro apagado",
+    })
+  }
+  const askRemoveSymbol = (symbol: MarketSymbol) =>
+    ask({
+      title: `Tirar ${symbol.code} da lista?`,
+      message: `${symbol.name} deixa de ser acompanhado.`,
+      consequences:
+        symbol.trades.length > 0
+          ? [
+              `As ${symbol.trades.length} compra(s)/venda(s) registradas somem junto.`,
+              "Os lançamentos que elas fizeram nas contas também saem do caixa.",
+            ]
+          : undefined,
+      confirmLabel: "Tirar da lista",
+      action: () => removeSymbol.mutateAsync(symbol.id),
+      done: `${symbol.code} saiu da lista`,
+    })
   const [display, setDisplay] = useState<Display>("original")
   const [adding, setAdding] = useState(false)
   const [trading, setTrading] = useState<{ symbol: MarketSymbol; side: "buy" | "sell" } | null>(null)
@@ -263,8 +349,8 @@ export function Market() {
         }
       />
       <main className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-        <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-          Área de teste: o que está aqui não entra no patrimônio nem nos ativos.
+        <p className="text-xs text-slate-400">
+          Tudo o que você tem aqui entra no patrimônio pela posição "Mercado", sempre pela cotação de agora.
         </p>
 
         <PortfolioCard hasTrades={hasTrades} />
@@ -296,8 +382,8 @@ export function Market() {
                   trade.reset()
                   setTrading({ symbol, side })
                 }}
-                onRemoveTrade={(id) => removeTrade.mutate(id)}
-                onRemove={() => removeSymbol.mutate(symbol.id)}
+                onRemoveTrade={(id) => askRemoveTrade(symbol, id)}
+                onRemove={() => askRemoveSymbol(symbol)}
               />
             ))}
           </Card>

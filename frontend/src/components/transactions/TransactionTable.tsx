@@ -1,4 +1,5 @@
-import { Pencil, Trash2 } from "lucide-react"
+import { ArrowUpRight, Link2, Pencil, Trash2 } from "lucide-react"
+import { Link } from "react-router-dom"
 import { Card } from "../ui/Card"
 import { Badge } from "../ui/Badge"
 import { formatCurrency, formatDate } from "../../lib/format"
@@ -41,7 +42,14 @@ export function TransactionTable({
         <tbody className="divide-y divide-slate-100 dark:divide-white/5">
           {transactions.map((tx) => (
             <tr key={tx.id} className="group">
-              <td className="px-5 py-3 font-medium text-slate-800 dark:text-slate-100">{tx.description}</td>
+              <td className="px-5 py-3 font-medium text-slate-800 dark:text-slate-100">
+                {tx.description}
+                {tx.origin && (
+                  <span className="mt-0.5 flex items-center gap-1 text-[11px] font-normal text-indigo-600 dark:text-indigo-400">
+                    <Link2 size={11} /> {tx.origin.label}
+                  </span>
+                )}
+              </td>
               <td className="px-5 py-3 text-slate-500 dark:text-slate-400">
                 {tx.category ? `${tx.category.icon} ${tx.category.name}` : "—"}
               </td>
@@ -63,19 +71,33 @@ export function TransactionTable({
                 {formatCurrency(tx.amount)}
               </td>
               <td className="px-5 py-3">
-                <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex justify-end gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
                   <button
                     onClick={() => onEdit(tx)}
+                    aria-label="Editar lançamento"
                     className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/5 dark:hover:text-slate-200"
                   >
                     <Pencil size={15} />
                   </button>
-                  <button
-                    onClick={() => onDelete(tx)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                  {tx.origin ? (
+                    // Veio de outra tela: o valor e a exclusão ficam por lá.
+                    <Link
+                      to={tx.origin.link}
+                      title={`Para mudar o valor ou apagar, vá em ${tx.origin.kind === "loan" ? "Empréstimos" : "Mercado"}`}
+                      aria-label={`Abrir ${tx.origin.kind === "loan" ? "Empréstimos" : "Mercado"}`}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-white/5 dark:hover:text-indigo-400"
+                    >
+                      <ArrowUpRight size={15} />
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => onDelete(tx)}
+                      aria-label="Excluir lançamento"
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
               </td>
             </tr>

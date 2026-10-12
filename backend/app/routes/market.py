@@ -1,13 +1,15 @@
-"""Mercado (área de teste): acompanhar ações/cripto e registrar compras.
+"""Mercado: acompanhar ações/cripto e registrar compras.
 
-Isolado do patrimônio. Só mexe numa conta quando a compra/venda informa uma.
+Tudo o que você tem aqui entra no patrimônio pela posição "Mercado", pela
+cotação de agora. Compra e venda pagas por uma conta são patrimônio mudando de
+forma (dinheiro vira ação e vice-versa), não gasto nem receita.
 """
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from sqlalchemy.orm import selectinload
 
 from app.extensions import db
@@ -15,8 +17,10 @@ from app.models.account import Account
 from app.models.market import MARKET_KINDS, TRADE_SIDES, MarketSymbol, MarketTrade, holding
 from app.models.transaction import Transaction
 from app.services import market_service
+from app.services.auto_value_service import market_position
 from app.services.market_service import MarketError
 from app.services.rates import rate
+from app.user_settings import merged as merged_settings
 from app.utils.parse import find, iso_date, money, text
 
 market_bp = Blueprint("market", __name__)
@@ -68,6 +72,39 @@ def _symbol_dict(symbol, quote):
     }
 
 
+def _is_b3(symbol):
+    return symbol.kind == "stock" and (symbol.provider_id.endswith(".SA") or symbol.currency == "BRL")
+
+
+def tax_estimate(symbols, settings, month=None):
+    """IR estimado do mês sobre o lucro realizado, com a isenção por volume de vendas.
+
+    Só ações da B3 (operação comum) e cripto. Não compensa prejuízo de meses
+    anteriores nem trata day trade — é uma estimativa para não ser pego de surpresa.
+    """
+    month = month or date.today().strftime("%Y-%m")
+    result = {}
+    for kind, members in (("stock", [s for s in symbols if _is_b3(s)]), ("crypto", [s for s in symbols if s.kind == "crypto"])):
+        sales = Decimal(0)
+        realized = Decimal(0)
+        for symbol in members:
+            entry = holding(symbol.trades)["by_month"].get(month)
+            if entry:
+                sales += entry["sales"]
+                realized += entry["realized"]
+        exempt = Decimal(str(settings[f"{kind}_exempt"]))
+        rate_pct = Decimal(str(settings[f"{kind}_tax"]))
+        tax = max(realized, Decimal(0)) * rate_pct / 100 if sales > exempt else Decimal(0)
+        result[kind] = {
+            "sales": float(sales),
+            "realized": float(realized),
+            "exempt_until": float(exempt),
+            "rate": float(rate_pct),
+            "tax": float(tax.quantize(Decimal("0.01"))),
+        }
+    return {"month": month, **result}
+
+
 def market_overview():
     """Lista + totais da carteira em reais. Usado pela tela e pelos Cálculos."""
     symbols = _symbols()
@@ -89,6 +126,7 @@ def market_overview():
             "day_change_pct": day / (value - day) * 100 if value - day > 0 else None,
             "missing_quotes": any(h["value_brl"] is None for h in held),
         },
+        "tax": tax_estimate(symbols, merged_settings(g.user.settings)),
     }
 
 
@@ -115,6 +153,7 @@ def add_symbol():
 
     symbol = MarketSymbol(kind=kind, **found)
     db.session.add(symbol)
+    market_position()
     db.session.commit()
     return jsonify({"id": symbol.id, "code": symbol.code, "name": symbol.name}), 201
 
@@ -151,9 +190,11 @@ def add_trade():
         return jsonify({"error": "side deve ser 'buy' ou 'sell'"}), 400
     quantity = money(data.get("quantity"), "Quantidade")
     price = money(data.get("price"), "Preço")
+    fees = money(data.get("fees"), "Taxas", allow_zero=True, required=False) or Decimal(0)
     when = iso_date(data.get("date"), "date", required=False) or date.today()
-    if side == "sell" and quantity > holding(symbol.trades)["quantity"]:
-        return jsonify({"error": f"Você não tem {quantity} {symbol.code} para vender"}), 400
+    # Só dá para vender o que já tinha naquela data — senão a posição fica negativa no meio do caminho.
+    if side == "sell" and quantity > holding([t for t in symbol.trades if t.date <= when])["quantity"]:
+        return jsonify({"error": f"Em {when.strftime('%d/%m/%Y')} você não tinha {quantity.normalize():f} {symbol.code} para vender"}), 400
 
     fx = rate(symbol.currency)
     if fx is None:
@@ -166,19 +207,25 @@ def add_trade():
         quantity=quantity,
         price=price,
         fx_rate=fx,
+        fees=fees,
         notes=text(data.get("notes"), "notes") or None,
     )
 
+    # Tudo o que está no Mercado entra no patrimônio por esta posição.
+    position = market_position()
     # Conta é opcional: sem ela, a compra só fica registrada aqui.
     if data.get("account_id"):
         account = find(Account, data["account_id"])
         if not account:
             return jsonify({"error": "Conta não encontrada"}), 400
         verb = "Compra" if side == "buy" else "Venda"
+        gross = quantity * price * fx
         transaction = Transaction(
             account_id=account.id,
+            # O dinheiro só muda de forma (vira ação): não é gasto nem receita.
+            playlist_id=position.id,
             description=f"{verb} {quantity.normalize():f} {symbol.code}",
-            amount=(quantity * price * fx).quantize(Decimal("0.01")),
+            amount=(gross + fees if side == "buy" else gross - fees).quantize(Decimal("0.01")),
             type="expense" if side == "buy" else "income",
             date=when,
             notes="Mercado",
@@ -196,6 +243,14 @@ def add_trade():
 @market_bp.delete("/trades/<int:trade_id>")
 def delete_trade(trade_id):
     trade = db.get_or_404(MarketTrade, trade_id)
+    # Sem esta compra, alguma venda depois dela ficaria vendendo o que não existia.
+    if trade.side == "buy":
+        running = Decimal(0)
+        for other in sorted(trade.symbol.trades, key=lambda t: (t.date, t.id)):
+            if other.id != trade.id:
+                running += other.quantity if other.side == "buy" else -other.quantity
+                if running < 0:
+                    return jsonify({"error": "Uma venda depois desta compra ficaria sem o que vender. Apague a venda antes."}), 400
     _drop_transactions([trade])
     db.session.delete(trade)
     db.session.commit()

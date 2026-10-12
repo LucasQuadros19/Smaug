@@ -29,6 +29,10 @@ DEFAULT_ASSET_TYPE = "investment"
 # Os tipos cujos lançamentos são gasto/receita de verdade — usado nas consultas.
 DECLARED_ASSET_TYPES = tuple(t for t, mode in ASSET_TYPE_MODES.items() if mode == "declarado")
 
+# De onde uma posição ligada tira o valor: a minha parte nos empréstimos em
+# aberto, ou tudo o que tenho no Mercado (essa é criada sozinha).
+AUTO_SOURCES = ("loans", "market")
+
 
 class Playlist(Owned, db.Model):
     __tablename__ = "playlists"
@@ -46,8 +50,8 @@ class Playlist(Owned, db.Model):
     # US$ 1.200. Oito casas para caber fração de bitcoin.
     opening_value = db.Column(db.Numeric(18, 8), nullable=False, default=0)
     currency = db.Column(db.String(3), nullable=False, default="BRL", server_default="BRL")
-    # Quando preenchido, o valor da posição é derivado de outra tela em vez de
-    # digitado. Hoje só "loans" (soma da minha parte nos empréstimos abertos).
+    # Quando preenchido, o valor da posição vem de outra tela em vez de ser
+    # digitado (ver AUTO_SOURCES). Vazio = valor digitado à mão.
     auto_source = db.Column(db.String(20), nullable=True)
     # Só faz sentido em kind="asset". Ver ASSET_TYPE_MODES acima.
     asset_type = db.Column(

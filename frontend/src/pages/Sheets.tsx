@@ -7,6 +7,8 @@ import { Card } from "../components/ui/Card"
 import { useCalcRefs, useSheetMutations, useSheets, type CalcRef } from "../hooks/useSheets"
 import { evaluateSheet, slug } from "../lib/calc"
 import type { Sheet } from "../types"
+import { useConfirm } from "../components/ui/ConfirmDialog"
+import { toastError } from "../lib/toast"
 
 const OPEN_KEY = "smaug.folhas-abertas"
 const LINE = 24 // px — textarea e coluna de resultados precisam da mesma altura de linha
@@ -67,6 +69,7 @@ function SheetColumn({
   onClose: () => void
 }) {
   const { update, remove } = useSheetMutations()
+  const ask = useConfirm()
   const [content, setContent] = useState(sheet.content)
   const [title, setTitle] = useState(sheet.title)
   const [suggest, setSuggest] = useState<ReturnType<typeof refBeforeCaret>>(null)
@@ -80,7 +83,7 @@ function SheetColumn({
   // Salva sozinho, um pouco depois de parar de digitar.
   useEffect(() => {
     if (content === sheet.content) return
-    const timer = setTimeout(() => update.mutate({ id: sheet.id, data: { content } }), 600)
+    const timer = setTimeout(() => update.mutate({ id: sheet.id, data: { content } }, { onError: toastError }), 600)
     return () => clearTimeout(timer)
   }, [content]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,12 +130,19 @@ function SheetColumn({
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => title.trim() && title !== sheet.title && update.mutate({ id: sheet.id, data: { title } })}
+          onBlur={() => title.trim() && title !== sheet.title && update.mutate({ id: sheet.id, data: { title } }, { onError: toastError })}
           className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-800 outline-none dark:text-slate-100"
           aria-label="Título da folha"
         />
         <button
-          onClick={() => confirm(`Apagar a folha "${sheet.title}"?`) && remove.mutate(sheet.id)}
+          onClick={() =>
+            ask({
+              title: "Apagar folha?",
+              message: `A folha "${sheet.title}" e os cálculos dela serão apagados.`,
+              action: () => remove.mutateAsync(sheet.id),
+              done: "Folha apagada",
+            })
+          }
           className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
           aria-label="Apagar folha"
         >
@@ -234,7 +244,7 @@ export function Sheets() {
   const toggle = (id: number) => setOpen(open.includes(id) ? open.filter((i) => i !== id) : [...open, id])
 
   const newSheet = () =>
-    create.mutate(`Folha ${(sheets?.length ?? 0) + 1}`, { onSuccess: (sheet) => setOpen([...open, sheet.id]) })
+    create.mutate(`Folha ${(sheets?.length ?? 0) + 1}`, { onSuccess: (sheet) => setOpen([...open, sheet.id]), onError: toastError })
 
   const visible = (sheets ?? []).filter((s) => open.includes(s.id))
 

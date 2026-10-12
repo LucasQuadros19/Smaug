@@ -13,9 +13,10 @@ import { WealthOverview } from "../components/dashboard/WealthOverview"
 import { useTransactions, useTransactionMutations } from "../hooks/useTransactions"
 import { useDashboardSummary } from "../hooks/useDashboard"
 import { useFormSubmit } from "../hooks/useFormSubmit"
-import { currentMonth } from "../lib/format"
+import { currentMonth, formatCurrency } from "../lib/format"
 import type { Transaction } from "../types"
 import type { TransactionFilters as Filters, TransactionInput } from "../api/transactions"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 export function Transactions() {
   const [filters, setFilters] = useState<Filters>({})
@@ -31,6 +32,7 @@ export function Transactions() {
 
   const transactions = result?.items ?? []
   const { create, update, remove } = useTransactionMutations()
+  const ask = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
@@ -50,11 +52,21 @@ export function Transactions() {
     submit(editing ? update.mutateAsync({ id: editing.id, data }) : create.mutateAsync(data))
   }
 
-  const handleDelete = (tx: Transaction) => {
-    if (confirm(`Excluir a transação "${tx.description}"?`)) {
-      remove.mutate(tx.id)
-    }
-  }
+  const handleDelete = (tx: Transaction) =>
+    ask({
+      title: "Excluir lançamento?",
+      message: (
+        <>
+          <strong>{tx.description}</strong> · {formatCurrency(tx.amount)} em {tx.account_name ?? "conta"}
+        </>
+      ),
+      consequences: [
+        `O saldo da conta ${tx.type === "income" ? "diminui" : "aumenta"} ${formatCurrency(tx.amount)}.`,
+        "Lançamentos que vieram de empréstimo ou do Mercado só saem por lá — o sistema avisa.",
+      ],
+      action: () => remove.mutateAsync(tx.id),
+      done: "Lançamento excluído",
+    })
 
   return (
     <>
@@ -109,6 +121,12 @@ export function Transactions() {
         title={editing ? "Editar transação" : "Nova transação"}
         error={error}
       >
+        {editing?.origin && (
+          <p className="mb-4 rounded-xl bg-indigo-500/10 px-3 py-2 text-xs text-indigo-700 dark:text-indigo-300">
+            Este lançamento veio {editing.origin.label}. Aqui dá para mudar descrição, categoria e observação; valor, conta e
+            data mudam {editing.origin.kind === "loan" ? "na tela de Empréstimos (desfazendo o recebimento)" : "no Mercado"}.
+          </p>
+        )}
         <TransactionForm
           initial={editing}
           onSubmit={handleSubmit}

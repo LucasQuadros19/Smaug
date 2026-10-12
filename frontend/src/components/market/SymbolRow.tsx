@@ -135,10 +135,11 @@ function Detail({
                   {t.side === "buy" ? "Compra" : "Venda"}
                 </span>{" "}
                 {quantityFormat.format(t.quantity)} × {money.native(t.price, symbol)}
+                {t.fees > 0 && ` + ${money.brl(t.fees, symbol)} de taxas`}
                 {t.account_id && " · mexeu na conta"}
               </span>
               <button
-                onClick={() => confirm("Apagar esse registro? Se mexeu numa conta, o lançamento some junto.") && onRemoveTrade(t.id)}
+                onClick={() => onRemoveTrade(t.id)}
                 className="rounded p-0.5 text-slate-300 hover:text-rose-500 dark:text-slate-600"
                 aria-label="Apagar registro"
               >
@@ -161,7 +162,7 @@ function Detail({
         <Button
           variant="ghost"
           className="ml-auto"
-          onClick={() => confirm(`Tirar ${symbol.code} da lista? Compras registradas somem junto.`) && onRemove()}
+          onClick={onRemove}
         >
           <Trash2 size={15} /> Remover
         </Button>

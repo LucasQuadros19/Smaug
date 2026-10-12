@@ -76,8 +76,9 @@ def update_account(account_id):
 
 @accounts_bp.delete("/<int:account_id>")
 def delete_account(account_id):
-    from app.models.loan import LoanRepayment
+    from app.models.loan import Loan, LoanRepayment
     from app.models.market import MarketTrade
+    from app.models.transaction import Transaction
     from app.models.playlist_expectation import PlaylistExpectation
     from app.models.snapshot import SnapshotEntry
 
@@ -86,9 +87,16 @@ def delete_account(account_id):
         return jsonify(
             {"error": "Essa conta está nos registros de patrimônio — apagar mudaria o histórico. Zere o saldo dela em vez de apagar."}
         ), 400
-    if LoanRepayment.query.filter_by(account_id=account_id).first() or MarketTrade.query.filter_by(account_id=account_id).first():
+    lent_from_here = (
+        Loan.query.join(Loan.outflow).filter(Transaction.account_id == account_id).first() is not None
+    )
+    if (
+        lent_from_here
+        or LoanRepayment.query.filter_by(account_id=account_id).first()
+        or MarketTrade.query.filter_by(account_id=account_id).first()
+    ):
         return jsonify(
-            {"error": "Essa conta recebeu valores de empréstimos ou do Mercado. Desfaça esses registros antes de apagar."}
+            {"error": "Essa conta tem movimentos de empréstimos ou do Mercado. Desfaça esses registros antes de apagar."}
         ), 400
 
     PlaylistExpectation.query.filter_by(account_id=account_id).update({"account_id": None})

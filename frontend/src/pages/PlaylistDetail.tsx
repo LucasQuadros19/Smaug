@@ -21,6 +21,7 @@ import { getAssetOutstanding, getTotalInvested, isDeclaredValue } from "../lib/a
 import type { Transaction } from "../types"
 import type { TransactionInput } from "../api/transactions"
 import type { PlaylistInput } from "../api/playlists"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 export function PlaylistDetail() {
   const { id } = useParams()
@@ -36,6 +37,7 @@ export function PlaylistDetail() {
   const transactions = txPage?.items
   const { create, update, remove } = useTransactionMutations()
   const { update: updatePlaylist, remove: removePlaylist } = usePlaylistMutations()
+  const ask = useConfirm()
 
   const [txModalOpen, setTxModalOpen] = useState(false)
   const [editingTx, setEditingTx] = useState<Transaction | undefined>()
@@ -70,11 +72,14 @@ export function PlaylistDetail() {
       editingTx ? update.mutateAsync({ id: editingTx.id, data }) : create.mutateAsync(data)
     )
   }
-  const handleDeleteTx = (tx: Transaction) => {
-    if (confirm(`Excluir a transação "${tx.description}"?`)) {
-      remove.mutate(tx.id)
-    }
-  }
+  const handleDeleteTx = (tx: Transaction) =>
+    ask({
+      title: "Excluir lançamento?",
+      message: `"${tx.description}" sai do caixa.`,
+      consequences: [`O saldo da conta ${tx.type === "income" ? "diminui" : "aumenta"} e o valor desta posição muda.`],
+      action: () => remove.mutateAsync(tx.id),
+      done: "Lançamento excluído",
+    })
 
   const handleSubmitPlaylist = (data: PlaylistInput) => {
     playlistForm.submit(updatePlaylist.mutateAsync({ id: playlist.id, data }))
@@ -83,15 +88,20 @@ export function PlaylistDetail() {
   const isAsset = playlist.kind === "asset"
   const listPath = isAsset ? "/ativos" : "/grupos"
 
-  const handleDeletePlaylist = () => {
-    if (
-      confirm(
-        `Excluir ${isAsset ? "o ativo" : "o grupo"} "${playlist.name}"? As transações já lançadas continuam no caixa geral, apenas deixam de estar agrupadas nele.`
-      )
-    ) {
-      removePlaylist.mutate(playlist.id, { onSuccess: () => navigate(listPath) })
-    }
-  }
+  const handleDeletePlaylist = () =>
+    ask({
+      title: `Excluir ${isAsset ? "ativo" : "grupo"}?`,
+      message: `"${playlist.name}" será apagado.`,
+      consequences: [
+        "Os lançamentos continuam no caixa; só deixam de estar marcados aqui.",
+        "Se estiver na Evolução, o sistema não deixa: desligue \"Contar no patrimônio\" ou zere o valor.",
+      ],
+      action: async () => {
+        await removePlaylist.mutateAsync(playlist.id)
+        navigate(listPath)
+      },
+      done: isAsset ? "Ativo excluído" : "Grupo excluído",
+    })
 
   const { outstanding, isProfit, isLiability, profit } = getAssetOutstanding(playlist)
   const declarado = isDeclaredValue(playlist)

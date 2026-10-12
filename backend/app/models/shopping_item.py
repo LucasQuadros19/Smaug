@@ -15,6 +15,10 @@ class ShoppingItem(Owned, db.Model):
     priority = db.Column(db.String(20), nullable=False, default="medium")
     notes = db.Column(db.String(500), nullable=True)
     purchased = db.Column(db.Boolean, nullable=False, default=False)
+    # O gasto lançado no caixa quando marcou como comprado (opcional).
+    transaction_id = db.Column(
+        db.Integer, db.ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
@@ -26,5 +30,6 @@ class ShoppingItem(Owned, db.Model):
             "priority": self.priority,
             "notes": self.notes,
             "purchased": self.purchased,
+            "transaction_id": self.transaction_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

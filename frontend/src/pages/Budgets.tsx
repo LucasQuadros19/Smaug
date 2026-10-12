@@ -11,11 +11,13 @@ import { useBudgets, useBudgetMutations } from "../hooks/useBudgets"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import { currentMonth } from "../lib/format"
 import type { BudgetInput } from "../api/budgets"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 export function Budgets() {
   const [month, setMonth] = useState(currentMonth())
   const { data: budgets, isLoading } = useBudgets(month)
   const { create, remove } = useBudgetMutations()
+  const ask = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
 
@@ -23,11 +25,14 @@ export function Budgets() {
     submit(create.mutateAsync(data))
   }
 
-  const handleDelete = (id: number, name?: string) => {
-    if (confirm(`Excluir o orçamento de "${name}"?`)) {
-      remove.mutate(id)
-    }
-  }
+  const handleDelete = (id: number, name?: string) =>
+    ask({
+      title: "Excluir orçamento?",
+      message: `O limite de ${name ?? "categoria"} neste mês será apagado.`,
+      consequences: ["Os gastos continuam no caixa; só o limite some."],
+      action: () => remove.mutateAsync(id),
+      done: "Orçamento excluído",
+    })
 
   return (
     <>

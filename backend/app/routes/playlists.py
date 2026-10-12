@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 from app.extensions import db
 from app.models.playlist import (
     ASSET_TYPES,
+    AUTO_SOURCES,
     DEFAULT_ASSET_TYPE,
     PLAYLIST_KINDS,
     Playlist,
@@ -43,16 +44,7 @@ def list_playlists():
 
 @playlists_bp.get("/<int:playlist_id>")
 def get_playlist(playlist_id):
-    playlist = db.get_or_404(Playlist, playlist_id)
-    totals = get_playlist_totals()
-    entry = totals.get(playlist_id, {})
-    return jsonify(
-        playlist.to_dict(
-            total_in=entry.get("in", Decimal("0")),
-            total_out=entry.get("out", Decimal("0")),
-            auto_value=auto_value_map([playlist]).get(playlist.id),
-        )
-    )
+    return jsonify(_with_values(db.get_or_404(Playlist, playlist_id)))
 
 
 @playlists_bp.get("/<int:playlist_id>/history")
@@ -143,6 +135,10 @@ def create_playlist():
     if currency not in CURRENCIES:
         return jsonify({"error": f"currency deve ser uma de {CURRENCIES}"}), 400
 
+    source = data.get("auto_source") or None
+    if source not in (None, *AUTO_SOURCES):
+        return jsonify({"error": f"auto_source deve ser um de {AUTO_SOURCES} ou vazio"}), 400
+
     playlist = Playlist(
         name=name,
         description=data.get("description"),
@@ -153,11 +149,21 @@ def create_playlist():
         opening_value=money(data.get("opening_value"), "opening_value", allow_negative=True, required=False) or 0,
         currency=currency,
         asset_type=asset_type,
-        auto_source="loans" if data.get("auto_source") == "loans" else None,
+        auto_source=source,
     )
     db.session.add(playlist)
     db.session.commit()
-    return jsonify(playlist.to_dict(total_in=0, total_out=0)), 201
+    return jsonify(_with_values(playlist)), 201
+
+
+def _with_values(playlist):
+    """A posição com os totais dos lançamentos e o valor ligado (se for ligada)."""
+    entry = get_playlist_totals().get(playlist.id, {})
+    return playlist.to_dict(
+        total_in=entry.get("in", Decimal("0")),
+        total_out=entry.get("out", Decimal("0")),
+        auto_value=auto_value_map([playlist]).get(playlist.id),
+    )
 
 
 @playlists_bp.put("/<int:playlist_id>")
@@ -198,18 +204,12 @@ def update_playlist(playlist_id):
         playlist.asset_type = novo_tipo
     if "auto_source" in data:
         source = data["auto_source"] or None
-        if source not in (None, "loans"):
-            return jsonify({"error": "auto_source deve ser 'loans' ou vazio"}), 400
+        if source not in (None, *AUTO_SOURCES):
+            return jsonify({"error": f"auto_source deve ser um de {AUTO_SOURCES} ou vazio"}), 400
         playlist.auto_source = source
 
     db.session.commit()
-    totals = get_playlist_totals()
-    entry = totals.get(playlist_id, {})
-    return jsonify(
-        playlist.to_dict(
-            total_in=entry.get("in", Decimal("0")), total_out=entry.get("out", Decimal("0"))
-        )
-    )
+    return jsonify(_with_values(playlist))
 
 
 @playlists_bp.delete("/<int:playlist_id>")
@@ -217,6 +217,13 @@ def delete_playlist(playlist_id):
     from app.models.snapshot import SnapshotEntry
 
     playlist = db.get_or_404(Playlist, playlist_id)
+    if playlist.auto_source == "market":
+        from app.models.market import MarketSymbol
+
+        if MarketSymbol.query.first():
+            return jsonify(
+                {"error": "Essa é a posição do Mercado: enquanto houver códigos lá, ela leva o valor deles ao patrimônio."}
+            ), 400
     if SnapshotEntry.query.filter_by(playlist_id=playlist_id).first():
         return jsonify(
             {

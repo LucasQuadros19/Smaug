@@ -161,10 +161,14 @@ def test_recebimento_com_lucro_aumenta_o_patrimonio(client, loan_setup, summary)
 
 
 def test_quita_sozinho_quando_a_minha_parte_volta_toda(client, loan_setup):
+    """Meu principal e meus juros voltaram: fecha, mesmo com o sócio por acertar."""
     conta, _, loan_id = loan_setup
     loan = client.post(
         f"/api/loans/{loan_id}/repayments",
-        json={"date": "2026-06-10", "amount": 25_000, "my_share": 25_000, "account_id": conta.id},
+        json={"date": "2026-06-10", "account_id": conta.id, "parts": [
+            {"kind": "principal", "amount": 25_000, "my_share": 25_000},
+            {"kind": "interest", "amount": 2_500, "my_share": 2_500},
+        ]},
     ).get_json()
     assert loan["status"] == "paid"
     assert loan["my_outstanding"] == 0
@@ -174,12 +178,16 @@ def test_desfazer_recebimento_reabre_e_limpa_lancamentos(client, loan_setup, sum
     conta, _, loan_id = loan_setup
     loan = client.post(
         f"/api/loans/{loan_id}/repayments",
-        json={"date": "2026-06-10", "amount": 25_000, "my_share": 25_000, "account_id": conta.id},
+        json={"date": "2026-06-10", "account_id": conta.id, "parts": [
+            {"kind": "principal", "amount": 25_000, "my_share": 25_000},
+            {"kind": "interest", "amount": 2_500, "my_share": 2_500},
+        ]},
     ).get_json()
     assert loan["status"] == "paid"
-    repayment_id = loan["repayments"][0]["id"]
+    parte = loan["repayments"][0]["id"]
+    assert client.delete(f"/api/loans/{loan_id}/repayments/{parte}").status_code == 400  # desfaz-se o passo inteiro
 
-    response = client.delete(f"/api/loans/{loan_id}/repayments/{repayment_id}")
+    response = client.delete(f"/api/loans/{loan_id}/events/{loan['events'][-1]['id']}")
     assert response.status_code == 200
     assert response.get_json()["status"] == "active"
 
@@ -293,3 +301,179 @@ def test_lancamento_do_recebimento_nao_muda_de_valor_solto(client, loan_setup):
     assert valor.status_code == 400
     assert descricao.status_code == 200
     assert client.get("/api/transactions").get_json()["items"][0]["amount"] == 1_000
+
+
+# --- por mês: só juros, parcelas e continuar para o próximo mês -----------
+
+
+def _mensal(client, **extra):
+    """10k meu, 10% ao mês = 1.000 de juros por mês."""
+    return client.post(
+        "/api/loans",
+        json={
+            "borrower": "Pedro",
+            "amount": 10_000,
+            "start_date": "2026-01-10",
+            "due_date": "2026-02-10",
+            "participants": [{"name": "Eu", "contributed": 10_000, "gain": 1_000, "is_me": True}],
+            **extra,
+        },
+    ).get_json()
+
+
+def _receber(client, loan, conta, parts, **extra):
+    response = client.post(
+        f"/api/loans/{loan['id']}/repayments",
+        json={"date": "2026-02-10", "account_id": conta.id, "parts": parts, **extra},
+    )
+    assert response.status_code == 201, response.get_data(as_text=True)
+    return response.get_json()
+
+
+def test_so_juros_continua_e_conta_como_receita(client, make_account, summary):
+    conta = make_account()
+    loan = _mensal(client, months=3)
+    assert loan["profit"] == 3_000 and loan["total_to_receive"] == 13_000
+    assert loan["next_payment"] == {"month": 1, "principal": 0, "my_principal": 0, "interest": 1_000, "my_interest": 1_000}
+
+    loan = _receber(client, loan, conta, [{"kind": "interest", "amount": 1_000}], next_due_date="2026-03-10")
+
+    assert loan["status"] == "active"
+    assert loan["due_date"] == "2026-03-10" and loan["months_charged"] == 1
+    assert loan["my_outstanding"] == 10_000  # juros não tiram dinheiro da rua
+    assert summary(month="2026-02")["month_income"] == 1_000
+
+
+def test_ultimo_mes_sugere_o_principal_e_quitar_fecha(client, make_account):
+    conta = make_account()
+    loan = _mensal(client, months=2)
+    loan = _receber(client, loan, conta, [{"kind": "interest", "amount": 1_000}], next_due_date="2026-03-10")
+    assert loan["next_payment"]["principal"] == 10_000
+
+    loan = _receber(client, loan, conta, [
+        {"kind": "principal", "amount": 10_000},
+        {"kind": "interest", "amount": 1_000},
+    ])
+    assert loan["status"] == "paid"
+
+
+def test_quitar_antes_do_combinado_fecha(client, make_account):
+    conta = make_account()
+    loan = _mensal(client, months=6)
+    loan = _receber(client, loan, conta, [{"kind": "interest", "amount": 1_000}], next_due_date="2026-03-10")
+    loan = _receber(client, loan, conta, [
+        {"kind": "principal", "amount": 10_000},
+        {"kind": "interest", "amount": 1_000},
+    ])
+    assert loan["status"] == "paid"
+    assert loan["months"] == 2 and loan["profit"] == 2_000
+
+
+def test_continuar_alem_do_combinado_soma_mais_um_mes(client, make_account):
+    conta = make_account()
+    loan = _mensal(client)
+    loan = _receber(client, loan, conta, [{"kind": "interest", "amount": 1_000}], next_due_date="2026-03-10")
+    assert loan["months"] == 2
+    assert loan["profit"] == 2_000
+    assert loan["status"] == "active"
+
+
+def test_parcelas_dividem_o_principal_que_falta(client, make_account):
+    conta = make_account()
+    loan = _mensal(client, months=3, schedule="installments")
+    assert loan["next_payment"]["principal"] == 3_333.33
+
+    loan = _receber(client, loan, conta, [
+        {"kind": "principal", "amount": 3_333.33},
+        {"kind": "interest", "amount": 1_000},
+    ], next_due_date="2026-03-10")
+    assert loan["next_payment"]["principal"] == 3_333.34  # 6.666,67 em 2 meses
+    assert loan["principal_outstanding"] == 6_666.67
+
+
+@pytest.mark.parametrize("extra", [{"months": 0}, {"months": "3"}, {"months": True}, {"schedule": "anual"}])
+def test_plano_invalido_e_recusado(client, extra):
+    response = client.post(
+        "/api/loans", json={"borrower": "X", "amount": 1, "start_date": "2026-01-10", **extra}
+    )
+    assert response.status_code == 400
+
+
+# --- adiamento, pagamento parcial, multa e desfazer -----------------------
+
+
+def _adiar(client, loan, **body):
+    return client.post(f"/api/loans/{loan['id']}/postpone", json=body)
+
+
+def test_adiar_com_juros_deixa_o_mes_pendente(client, make_account):
+    loan = _mensal(client, months=2)
+    response = _adiar(client, loan, due_date="2026-03-10")
+    assert response.status_code == 201
+    loan = response.get_json()
+
+    assert loan["due_date"] == "2026-03-10"
+    assert loan["interest_pending"] == 1_000
+    assert loan["months"] == 2 and loan["months_charged"] == 1
+    assert loan["next_payment"]["interest"] == 2_000  # o mês adiado + o atual
+
+
+def test_adiar_sem_juros_e_carencia(client):
+    loan = _mensal(client, months=2)
+    loan = _adiar(client, loan, due_date="2026-03-10", charge_interest=False).get_json()
+    assert loan["interest_pending"] == 0
+    assert loan["months_charged"] == 0
+    assert loan["next_payment"]["interest"] == 1_000
+
+
+def test_adiar_exige_data_depois_e_emprestimo_aberto(client, make_account):
+    loan = _mensal(client)
+    assert _adiar(client, loan, due_date="2026-02-01").status_code == 400
+    assert _adiar(client, loan).status_code == 400
+    _receber(client, loan, make_account(), [{"kind": "principal", "amount": 10_000}, {"kind": "interest", "amount": 1_000}])
+    assert _adiar(client, loan, due_date="2026-04-10").status_code == 400
+
+
+def test_pagamento_parcial_nao_muda_o_vencimento(client, make_account):
+    conta = make_account()
+    loan = _mensal(client, months=2)
+    loan = _adiar(client, loan, due_date="2026-03-10").get_json()
+
+    loan = _receber(client, loan, conta, [{"kind": "interest", "amount": 400}])
+
+    assert loan["due_date"] == "2026-03-10"
+    assert loan["interest_pending"] == 600
+    assert loan["status"] == "active"
+
+
+def test_multa_e_receita_e_nao_quita(client, make_account, summary):
+    conta = make_account()
+    loan = _mensal(client)
+    loan = _receber(client, loan, conta, [{"kind": "fee", "amount": 11_000}])
+    assert loan["status"] == "active"  # multa não paga principal nem juros
+    assert summary(month="2026-02")["month_income"] == 11_000
+
+
+def test_desfazer_so_o_ultimo_passo_e_volta_tudo(client, make_account, summary):
+    conta = make_account()
+    loan = _mensal(client, months=2)
+    loan = _receber(client, loan, conta, [{"kind": "interest", "amount": 1_000}], next_due_date="2026-03-10")
+    loan = _adiar(client, loan, due_date="2026-04-10").get_json()
+    primeiro, ultimo = loan["events"]
+
+    assert client.delete(f"/api/loans/{loan['id']}/events/{primeiro['id']}").status_code == 400
+    loan = client.delete(f"/api/loans/{loan['id']}/events/{ultimo['id']}").get_json()
+    assert loan["due_date"] == "2026-03-10" and loan["months"] == 2 and loan["months_charged"] == 1
+
+    loan = client.delete(f"/api/loans/{loan['id']}/events/{primeiro['id']}").get_json()
+    assert loan["due_date"] == "2026-02-10" and loan["months_charged"] == 0 and loan["events"] == []
+    assert summary(month="2026-02")["month_income"] == 0  # o lançamento dos juros sumiu junto
+
+
+def test_pagou_a_mais_desconta_do_proximo(client, make_account):
+    conta = make_account()
+    loan = _mensal(client, months=2)
+    loan = _adiar(client, loan, due_date="2026-03-10").get_json()
+    loan = _receber(client, loan, conta, [{"kind": "interest", "amount": 1_500}])
+    assert loan["interest_pending"] == 0
+    assert loan["next_payment"]["interest"] == 500

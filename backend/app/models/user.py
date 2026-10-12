@@ -12,9 +12,18 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     # Caminhos das abas escondidas na barra lateral ("/mercado"). A URL continua abrindo.
     hidden_tabs = db.Column(db.JSON, nullable=False, default=list)
+    # Padrões de mercado que a pessoa mudou (ver `app.user_settings`).
+    settings = db.Column(db.JSON, nullable=True)
     # Vai no cookie de login; trocar a senha soma 1 e desconecta os outros aparelhos.
     session_version = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
-        return {"id": str(self.id), "username": self.username, "hidden_tabs": self.hidden_tabs}
+        from app.user_settings import merged
+
+        return {
+            "id": str(self.id),
+            "username": self.username,
+            "hidden_tabs": self.hidden_tabs,
+            "settings": merged(self.settings),
+        }

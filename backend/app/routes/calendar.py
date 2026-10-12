@@ -14,12 +14,12 @@ from werkzeug.exceptions import BadRequest
 from app.extensions import db
 from app.models.calendar_event import EVENT_DIRECTIONS, CalendarEvent
 from app.models.goal import Goal
-from app.models.loan import Loan, LoanRepayment
+from app.models.loan import CENT, Loan, LoanRepayment
 from app.models.playlist_expectation import PlaylistExpectation
 from app.models.recurring import RecurringTransaction
 from app.models.transaction import Transaction
 from app.services.history_service import month_bounds
-from app.services.recurring_service import next_due_after
+from app.services.recurring_service import add_months, next_due_after
 from app.utils.parse import color, iso_date, money, text
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -88,27 +88,53 @@ def _recurring(start, end, today):
     return items
 
 
+def _loan_schedule(loan, start, end, today):
+    """Os vencimentos que faltam, um por mês a partir do próximo."""
+    items = []
+    principal = loan.principal_outstanding
+    remaining = max(loan.months - loan.months_charged, 1)
+    for k in range(remaining):
+        when = add_months(loan.due_date, k)
+        if when > end:
+            break
+        last = k == remaining - 1
+        if loan.schedule == "installments":
+            back = (principal / remaining).quantize(CENT) if not last else principal - (principal / remaining).quantize(CENT) * k
+        else:
+            back = principal if last else 0
+        if when >= start:
+            label = "Quitação" if last else f"Mês {loan.months_charged + k + 1} de {loan.months}"
+            items.append(_item("loan", when, f"{label} · {loan.borrower}", key=f"due{loan.id}-{k}",
+                               amount=loan.monthly_interest + back + (loan.interest_pending if k == 0 else 0), direction="in",
+                               status="overdue" if when < today else None, link="/emprestimos"))
+    return items
+
+
 def _loans(start, end, today):
     items = []
-    loans = Loan.query.options(selectinload(Loan.participants)).filter(
-        ((Loan.start_date >= start) & (Loan.start_date <= end))
-        | ((Loan.due_date >= start) & (Loan.due_date <= end))
-    ).all()
+    # Vencimentos se repetem todo mês: entra todo empréstimo em aberto que já venceu antes do fim do mês.
+    loans = (
+        Loan.query.options(selectinload(Loan.participants), selectinload(Loan.repayments))
+        .filter(
+            ((Loan.start_date >= start) & (Loan.start_date <= end))
+            | ((Loan.status != "paid") & (Loan.due_date <= end))
+        )
+        .all()
+    )
     for loan in loans:
         if start <= loan.start_date <= end:
             items.append(_item("loan", loan.start_date, f"Emprestou para {loan.borrower}", key=f"loan{loan.id}",
                                amount=loan.amount, direction="out", link="/emprestimos"))
-        if loan.due_date and start <= loan.due_date <= end and loan.status != "paid":
-            items.append(_item("loan", loan.due_date, f"Retorno de {loan.borrower}", key=f"due{loan.id}",
-                               amount=loan.total_to_receive or None, direction="in",
-                               status="overdue" if loan.due_date < today else None, link="/emprestimos"))
+        if loan.due_date and loan.status != "paid":
+            items += _loan_schedule(loan, start, end, today)
     repayments = (
         LoanRepayment.query.options(joinedload(LoanRepayment.loan))
         .filter(LoanRepayment.date >= start, LoanRepayment.date <= end)
         .all()
     )
     for repayment in repayments:
-        items.append(_item("loan", repayment.date, f"Recebido de {repayment.loan.borrower}", key=f"rep{repayment.id}",
+        what = {"interest": "Juros recebidos", "fee": "Multa recebida"}.get(repayment.kind, "Recebido")
+        items.append(_item("loan", repayment.date, f"{what} · {repayment.loan.borrower}", key=f"rep{repayment.id}",
                            amount=repayment.amount, direction="in", status="done", link="/emprestimos"))
     return items
 

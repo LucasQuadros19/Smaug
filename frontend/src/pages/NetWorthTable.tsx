@@ -18,6 +18,7 @@ import { useFormSubmit } from "../hooks/useFormSubmit"
 import { formatCurrency, formatDate, formatMoney } from "../lib/format"
 import type { Snapshot } from "../types"
 import type { SnapshotInput } from "../api/snapshots"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 /** Zero fica apagado para a tabela não virar um muro de números. Em outra
  *  moeda mostra o valor como você digitou (US$, BTC) e os reais no hover. */
@@ -58,6 +59,7 @@ export function NetWorthTable() {
   const { data: accounts } = useAccounts()
   const viewing = useViewing()
   const { create, transfer, settle, invest, remove } = useSnapshotMutations()
+  const ask = useConfirm()
   const [modal, setModal] = useState<"record" | "transfer" | "settle" | "invest" | null>(null)
   const { submit, error, reset } = useFormSubmit(() => setModal(null))
 
@@ -71,15 +73,17 @@ export function NetWorthTable() {
 
   const handleSubmit = (data: SnapshotInput) => submit(create.mutateAsync(data))
 
-  const handleDelete = (snapshot: Snapshot) => {
-    if (
-      confirm(
-        `Excluir o registro de ${formatDate(snapshot.date)}? Isso remove só a linha do histórico, não muda o patrimônio atual.`
-      )
-    ) {
-      remove.mutate(snapshot.id)
-    }
-  }
+  const handleDelete = (snapshot: Snapshot) =>
+    ask({
+      title: "Excluir registro?",
+      message: `O registro de ${formatDate(snapshot.date)} sai da Evolução.`,
+      consequences: [
+        "Remove só a linha do histórico e o ponto do gráfico.",
+        "Saldos das contas e valores das posições de hoje não mudam.",
+      ],
+      action: () => remove.mutateAsync(snapshot.id),
+      done: "Registro excluído",
+    })
 
   const latest = snapshots?.[0]
 
@@ -213,7 +217,7 @@ export function NetWorthTable() {
                     <td className="px-4 py-2.5">
                       <button
                         onClick={() => handleDelete(snapshot)}
-                        className="rounded-lg p-1.5 text-slate-300 opacity-0 transition-opacity hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:text-slate-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+                        className="rounded-lg p-1.5 text-slate-300 transition-opacity hover:bg-rose-50 hover:text-rose-600 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100 dark:text-slate-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
                         aria-label="Excluir registro"
                       >
                         <Trash2 size={14} />

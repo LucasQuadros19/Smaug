@@ -11,20 +11,22 @@ import { useExpectations, useExpectationMutations } from "../../hooks/useExpecta
 import { useFormSubmit } from "../../hooks/useFormSubmit"
 import type { PlaylistExpectation } from "../../types"
 import type { ExpectationInput, LaunchExpectationInput } from "../../api/expectations"
+import { useConfirm } from "../../components/ui/ConfirmDialog"
 
 type ModalKind = "create" | "launch" | "renew" | null
 
 export function ExpectationsSection({ playlistId }: { playlistId: number }) {
   const { data: expectations, isLoading } = useExpectations({ playlist_id: playlistId })
   const { create, update, remove, launch } = useExpectationMutations()
+  const ask = useConfirm()
 
   const [modal, setModal] = useState<ModalKind>(null)
   const [active, setActive] = useState<PlaylistExpectation | undefined>()
   const form = useFormSubmit(() => setModal(null))
 
-  const items = [...(expectations ?? [])].sort((a, b) =>
-    a.expected_date.localeCompare(b.expected_date)
-  )
+  const sorted = [...(expectations ?? [])].sort((a, b) => a.expected_date.localeCompare(b.expected_date))
+  const items = sorted.filter((e) => e.status === "pending")
+  const closed = sorted.filter((e) => e.status !== "pending")
 
   const handleCreate = (data: Omit<ExpectationInput, "playlist_id">) => {
     form.submit(create.mutateAsync({ ...data, playlist_id: playlistId }))
@@ -40,11 +42,14 @@ export function ExpectationsSection({ playlistId }: { playlistId: number }) {
     form.submit(update.mutateAsync({ id: active.id, data }))
   }
 
-  const handleDelete = (expectation: PlaylistExpectation) => {
-    if (window.confirm(`Excluir "${expectation.description}"?`)) {
-      remove.mutate(expectation.id)
-    }
-  }
+  const handleDelete = (expectation: PlaylistExpectation) =>
+    ask({
+      title: "Excluir previsão?",
+      message: `"${expectation.description}" sai da lista de esperados.`,
+      consequences: ["O que já foi lançado no caixa continua."],
+      action: () => remove.mutateAsync(expectation.id),
+      done: "Previsão excluída",
+    })
 
   const openModal = (kind: ModalKind, expectation?: PlaylistExpectation) => {
     form.reset()
@@ -65,7 +70,7 @@ export function ExpectationsSection({ playlistId }: { playlistId: number }) {
 
       {isLoading ? (
         <p className="text-sm text-slate-400">Carregando...</p>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && closed.length === 0 ? (
         <p className="text-sm text-slate-400">
           Nenhum movimento esperado ainda. Cadastre uma parcela ou cheque com data prevista —
           quando chegar a hora, clique em "Lançar" para lançar no caixa (pode clicar de novo no
@@ -82,6 +87,25 @@ export function ExpectationsSection({ playlistId }: { playlistId: number }) {
               onDelete={() => handleDelete(expectation)}
             />
           ))}
+          {closed.length > 0 && (
+            <details className="pt-1 text-sm">
+              <summary className="cursor-pointer text-xs text-slate-400">Encerradas ({closed.length})</summary>
+              <ul className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                {closed.map((e) => (
+                  <li key={e.id} className="flex items-center justify-between gap-2">
+                    <span>{e.description}</span>
+                    <button
+                      onClick={() => handleDelete(e)}
+                      className="text-slate-300 hover:text-rose-500 dark:text-slate-600"
+                      aria-label="Excluir"
+                    >
+                      excluir
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 

@@ -16,6 +16,8 @@ export function usePlaylistMutations() {
     queryClient.invalidateQueries({ queryKey: ["playlists"] })
     queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     queryClient.invalidateQueries({ queryKey: ["transactions"] })
+    // Ligar/desligar a origem muda o que o Mercado mostra no patrimônio.
+    queryClient.invalidateQueries({ queryKey: ["market"] })
   }
 
   const create = useMutation({

@@ -4,7 +4,7 @@ import { formatCurrency } from "../../lib/format"
 import { seriesColor } from "../../lib/chartTheme"
 import { useTheme } from "../../context/ThemeContext"
 
-type Person = { name: string; contributed: number; to_receive: number; commission: number; is_me: boolean }
+type Person = { name: string; contributed: number; gain: number; commission: number; is_me: boolean }
 type Slice = { key: string; label: string; value: number; color: string }
 
 const COMMISSION_COLOR = { light: "#8b80a6", dark: "#a197bd" }
@@ -36,8 +36,8 @@ function Bar({ title, slices }: { title: string; slices: Slice[] }) {
 }
 
 /**
- * Duas barras de 100%: quem emprestou quanto e quem recebe quanto. A comissão
- * é uma fatia à parte (roxo acinzentado) na barra de quem recebe.
+ * Duas barras de 100%: quem emprestou quanto e quem ganha quanto por mês. A
+ * comissão é uma fatia à parte (roxo acinzentado) na barra do ganho.
  */
 export function LoanBars({ people }: { people: Person[] }) {
   const { theme } = useTheme()
@@ -47,12 +47,12 @@ export function LoanBars({ people }: { people: Person[] }) {
   const named = people.filter((p) => p.name.trim())
   const colored = named.map((p, i) => ({ ...p, color: seriesColor(i, isDark) }))
   const lent = colored.reduce((sum, p) => sum + p.contributed, 0)
-  const back = colored.reduce((sum, p) => sum + p.to_receive + p.commission, 0)
+  const monthly = colored.reduce((sum, p) => sum + p.gain + p.commission, 0)
   const percent = (value: number, total: number) => (total > 0 ? `${Math.round((value / total) * 100)}%` : "")
 
   const hasCommission = colored.some((p) => p.commission > 0)
   // Uma pessoa só e sem comissão: as barras seriam 100% inteiras, não dizem nada.
-  if ((lent <= 0 && back <= 0) || (colored.length < 2 && !hasCommission)) return null
+  if ((lent <= 0 && monthly <= 0) || (colored.length < 2 && !hasCommission)) return null
 
   return (
     <div className="space-y-3">
@@ -61,9 +61,9 @@ export function LoanBars({ people }: { people: Person[] }) {
         slices={colored.map((p, i) => ({ key: `l${i}`, label: p.name, value: p.contributed, color: p.color }))}
       />
       <Bar
-        title="Quem recebe"
+        title="Quem ganha por mês"
         slices={[
-          ...colored.map((p, i) => ({ key: `r${i}`, label: p.name, value: p.to_receive, color: p.color })),
+          ...colored.map((p, i) => ({ key: `r${i}`, label: p.name, value: p.gain, color: p.color })),
           ...colored.map((p, i) => ({ key: `c${i}`, label: `Comissão · ${p.name}`, value: p.commission, color: commissionColor })),
         ]}
       />
@@ -71,11 +71,11 @@ export function LoanBars({ people }: { people: Person[] }) {
       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1.5 text-sm">
         <span className="text-[11px] text-slate-400">Pessoa</span>
         <span className="text-right text-[11px] text-slate-400">Emprestou</span>
-        <span className="text-right text-[11px] text-slate-400">Recebe</span>
-        {colored.map((p, i) => (p.contributed <= 0 && p.to_receive <= 0 ? null : (
+        <span className="text-right text-[11px] text-slate-400">Ganha/mês</span>
+        {colored.map((p, i) => (p.contributed <= 0 && p.gain <= 0 ? null : (
           <PersonRow key={i} color={p.color} name={p.name} isMe={p.is_me}>
             <Amount value={p.contributed} share={percent(p.contributed, lent)} />
-            <Amount value={p.to_receive} share={percent(p.to_receive, back)} accent="text-emerald-600 dark:text-emerald-400" />
+            <Amount value={p.gain} share={percent(p.gain, monthly)} accent="text-emerald-600 dark:text-emerald-400" />
           </PersonRow>
         )))}
         {colored
@@ -83,7 +83,7 @@ export function LoanBars({ people }: { people: Person[] }) {
           .map((p, i) => (
             <PersonRow key={`c${i}`} color={commissionColor} name={`Comissão · ${p.name}`} isMe={p.is_me}>
               <span />
-              <Amount value={p.commission} share={percent(p.commission, back)} accent="text-[#7a6f96] dark:text-[#b3a9cf]" />
+              <Amount value={p.commission} share={percent(p.commission, monthly)} accent="text-[#7a6f96] dark:text-[#b3a9cf]" />
             </PersonRow>
           ))}
       </div>

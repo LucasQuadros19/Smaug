@@ -67,9 +67,10 @@ def export_snapshots():
         + [a.name for a in accounts]
         + ["Entrada", "Investido", "Patrimonio", "Obs"]
     )
+    counting = {p.id for p in positions if p.counts_in_net_worth}
     rows = [header]
     for snapshot in snapshots:
-        data = snapshot.to_dict()
+        data = snapshot.to_dict(counting)
         rows.append(
             [snapshot.date.isoformat()]
             + [_money(data["positions"].get(str(p.id), 0)) for p in positions]
@@ -127,11 +128,13 @@ def export_loans():
             "Para quem",
             "Emprestado em",
             "Valor total",
-            "Taxa %",
+            "Taxa % ao mes",
+            "Meses",
             "Situacao",
             "Participante",
             "Entrou com",
-            "Recebe",
+            "Ganha por mes",
+            "Comissao por mes",
             "E voce",
             "Ja recebido",
             "Em aberto (seu)",
@@ -144,11 +147,12 @@ def export_loans():
             loan.start_date.isoformat() if loan.start_date else "",
             _money(loan.amount),
             _money(loan.interest_rate),
+            loan.months,
             loan.status,
         ]
         tail = [_money(loan.my_repaid), _money(loan.my_outstanding), loan.notes or ""]
         if not loan.participants:
-            rows.append(base + ["", "", "", "", *tail])
+            rows.append(base + ["", "", "", "", "", *tail])
             continue
         for participant in loan.participants:
             rows.append(
@@ -156,7 +160,8 @@ def export_loans():
                 + [
                     participant.name,
                     _money(participant.contributed),
-                    _money(participant.to_receive),
+                    _money(participant.gain),
+                    _money(participant.commission),
                     "sim" if participant.is_me else "",
                     *tail,
                 ]

@@ -59,8 +59,8 @@ def test_emprestimo_previsao_meta_e_evento(client, make_account, make_position):
     itens = {i["title"]: i for i in _mes(client, "2030-05")}
 
     assert itens["Emprestou para Carlos"]["date"] == "2030-05-02"
-    assert itens["Recebido de Carlos"]["status"] == "done"
-    assert itens["Retorno de Carlos"]["amount"] == 1_100
+    assert itens["Recebido · Carlos"]["status"] == "done"
+    assert itens["Quitação · Carlos"]["amount"] == 800  # 100 de juros + 700 do principal que falta
     assert itens["Parcela · obra"]["link"] == f"/ativos/{ativo.id}"
     assert itens["Prazo da meta Reserva"]["kind"] == "goal"
     assert itens["IPVA"]["event"]["amount"] == 900

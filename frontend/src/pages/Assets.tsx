@@ -10,10 +10,12 @@ import { useTransactionMutations } from "../hooks/useTransactions"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { Playlist } from "../types"
 import type { PlaylistInput } from "../api/playlists"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 export function Assets() {
   const { data: playlists, isLoading } = usePlaylists()
   const { create, update, remove } = usePlaylistMutations()
+  const ask = useConfirm()
   const { create: createTransaction } = useTransactionMutations()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Playlist | undefined>()
@@ -52,15 +54,17 @@ export function Assets() {
     submit(action())
   }
 
-  const handleDelete = (asset: Playlist) => {
-    if (
-      confirm(
-        `Excluir o ativo "${asset.name}"? As transações já lançadas continuam no caixa geral, apenas deixam de estar agrupadas nele.`
-      )
-    ) {
-      remove.mutate(asset.id)
-    }
-  }
+  const handleDelete = (asset: Playlist) =>
+    ask({
+      title: "Excluir ativo?",
+      message: `O ativo "${asset.name}" será apagado.`,
+      consequences: [
+        "Os lançamentos continuam no caixa; só deixam de estar marcados aqui.",
+        "Se estiver na Evolução, o sistema não deixa: desligue \"Contar no patrimônio\" ou zere o valor.",
+      ],
+      action: () => remove.mutateAsync(asset.id),
+      done: "Ativo excluído",
+    })
 
   const assets = playlists?.filter((p) => p.kind === "asset") ?? []
 

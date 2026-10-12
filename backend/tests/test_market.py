@@ -76,11 +76,12 @@ def test_nao_vende_mais_do_que_tem(client, mercado):
     assert _comprar(client, weg, 2, 50, side="sell").status_code == 400
 
 
-def test_mercado_nao_entra_no_patrimonio(client, mercado, make_account, summary):
+def test_mercado_entra_no_patrimonio_pela_cotacao(client, mercado, make_account, summary):
+    """Compra sem conta (já era seu): soma no patrimônio pelo preço de agora."""
     weg, _ = mercado
     make_account(initial=1000)
-    _comprar(client, weg, 10, 50)
-    assert summary()["net_worth"] == 1000
+    _comprar(client, weg, 10, 40)
+    assert summary()["net_worth"] == 1500  # 10 × R$ 50 de agora
 
 
 def test_apagar_compra_desfaz_o_lancamento(client, mercado, make_account, summary):

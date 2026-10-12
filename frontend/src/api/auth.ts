@@ -1,5 +1,5 @@
 import { api, ApiError } from "./client"
-import type { User } from "../types"
+import type { Settings, User } from "../types"
 
 export type Credentials = { username: string; password: string }
 
@@ -15,4 +15,5 @@ export const authApi = {
   logout: () => api.post<void>("/auth/logout"),
   changePassword: (current: string, next: string) => api.post<void>("/auth/password", { current, new: next }),
   updateHiddenTabs: (hidden_tabs: string[]) => api.put<User>("/auth/me", { hidden_tabs }),
+  updateSettings: (settings: Partial<Settings>) => api.put<User>("/auth/me", { settings }),
 }

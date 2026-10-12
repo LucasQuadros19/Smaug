@@ -9,10 +9,12 @@ import { useAccounts, useAccountMutations } from "../hooks/useAccounts"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { Account } from "../types"
 import type { AccountInput } from "../api/accounts"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 export function Accounts() {
   const { data: accounts, isLoading } = useAccounts()
   const { create, update, remove } = useAccountMutations()
+  const ask = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Account | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
@@ -32,11 +34,21 @@ export function Accounts() {
     submit(editing ? update.mutateAsync({ id: editing.id, data }) : create.mutateAsync(data))
   }
 
-  const handleDelete = (account: Account) => {
-    if (confirm(`Excluir a conta "${account.name}"? Todas as transações associadas também serão excluídas.`)) {
-      remove.mutate(account.id)
-    }
-  }
+  const handleDelete = (account: Account) =>
+    ask({
+      title: "Excluir conta?",
+      message: (
+        <>
+          A conta <strong>{account.name}</strong> e todos os lançamentos dela serão apagados.
+        </>
+      ),
+      consequences: [
+        "Os lançamentos dessa conta somem do caixa, dos gráficos e dos orçamentos.",
+        "Se a conta estiver na Evolução, em empréstimos ou no Mercado, o sistema não deixa: zere o saldo em vez de apagar.",
+      ],
+      action: () => remove.mutateAsync(account.id),
+      done: "Conta excluída",
+    })
 
   return (
     <>

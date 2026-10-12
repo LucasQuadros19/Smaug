@@ -11,8 +11,10 @@ import { EventForm } from "../components/calendar/EventForm"
 import { useCalendar, useCalendarMutations } from "../hooks/useCalendar"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import { currentMonth, formatCurrency, isoDate, todayISO } from "../lib/format"
+import { holidayName } from "../lib/businessDays"
 import type { CalendarEventInput } from "../api/calendar"
 import type { CalendarEvent, CalendarItem, CalendarKind } from "../types"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 const KINDS: Record<CalendarKind, { label: string; chip: string; dot: string }> = {
   bill: { label: "Contas", chip: "bg-rose-500/10 text-rose-700 dark:text-rose-300", dot: "bg-rose-500" },
@@ -65,6 +67,7 @@ export function Calendar() {
   const [modal, setModal] = useState<{ event?: CalendarEvent; date: string } | null>(null)
   const { data, isLoading, isError } = useCalendar(month)
   const { create, update, remove } = useCalendarMutations()
+  const ask = useConfirm()
   const { submit, error, reset } = useFormSubmit(() => setModal(null))
 
   const today = todayISO()
@@ -91,9 +94,13 @@ export function Calendar() {
   }
   const handleSubmit = (input: CalendarEventInput) =>
     submit(modal?.event ? update.mutateAsync({ id: modal.event.id, data: input }) : create.mutateAsync(input))
-  const handleDelete = (event: CalendarEvent) => {
-    if (confirm(`Excluir o evento "${event.title}"?`)) remove.mutate(event.id)
-  }
+  const handleDelete = (event: CalendarEvent) =>
+    ask({
+      title: "Excluir evento?",
+      message: `"${event.title}" sai do calendário.`,
+      action: () => remove.mutateAsync(event.id),
+      done: "Evento excluído",
+    })
   const toggle = (kind: CalendarKind) =>
     setHidden((prev) => {
       const next = new Set(prev)
@@ -166,6 +173,7 @@ export function Calendar() {
                 if (!day) return <div key={index} className="min-h-14 border-b border-r border-slate-100 bg-slate-50/50 [&:nth-child(7n)]:border-r-0 sm:min-h-24 dark:border-white/5 dark:bg-white/[0.01]" />
                 const list = byDay.get(day) ?? []
                 const overdue = list.some((i) => i.status === "overdue")
+                const holiday = holidayName(day)
                 return (
                   <button
                     key={day}
@@ -190,6 +198,12 @@ export function Calendar() {
                     >
                       {Number(day.slice(8))}
                     </span>
+                    {holiday && (
+                      <span className="truncate text-[10px] leading-none text-amber-600 dark:text-amber-400" title={holiday}>
+                        <span className="sm:hidden">feriado</span>
+                        <span className="hidden sm:inline">{holiday}</span>
+                      </span>
+                    )}
                     <span className="flex flex-wrap gap-0.5 sm:hidden">
                       {list.slice(0, 4).map((item) => (
                         <span key={item.key} className={clsx("h-1.5 w-1.5 rounded-full", KINDS[item.kind].dot)} style={dotStyle(item)} />
@@ -223,6 +237,9 @@ export function Calendar() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">{dayTitle(selected)}</p>
+                {holidayName(selected) && (
+                  <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Feriado: {holidayName(selected)}</p>
+                )}
                 <p className="text-xs text-slate-400">
                   {dayItems.length === 0 ? "Nada neste dia" : `${dayItems.length} ${dayItems.length === 1 ? "item" : "itens"}`}
                 </p>

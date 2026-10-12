@@ -1,14 +1,14 @@
 {
   "name": "smaug",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "check": "node --experimental-strip-types --no-warnings scripts/calc.check.ts"
+    "check": "node --experimental-strip-types --no-warnings scripts/businessDays.check.ts && node --experimental-strip-types --no-warnings scripts/loanSplit.check.ts && node --experimental-strip-types --no-warnings scripts/calc.check.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

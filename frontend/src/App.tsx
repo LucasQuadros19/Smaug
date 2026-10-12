@@ -3,6 +3,8 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider, useQueryCl
 import { RouterProvider } from "react-router-dom"
 import { ApiError } from "./api/client"
 import { ThemeProvider } from "./context/ThemeContext"
+import { ConfirmProvider } from "./components/ui/ConfirmDialog"
+import { Toaster } from "./components/ui/Toaster"
 import { recurringApi } from "./api/recurring"
 import { setSessionUser, useMe } from "./hooks/useMe"
 import { getViewing } from "./lib/viewing"
@@ -63,7 +65,10 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <Gate />
+        <ConfirmProvider>
+          <Gate />
+        </ConfirmProvider>
+        <Toaster />
       </ThemeProvider>
     </QueryClientProvider>
   )

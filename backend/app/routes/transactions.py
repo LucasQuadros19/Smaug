@@ -18,19 +18,62 @@ transactions_bp = Blueprint("transactions", __name__)
 _MONEY_FIELDS = ("account_id", "amount", "type", "date", "playlist_id")
 
 
+_KEEP = "Descrição, categoria e observação dá para mudar aqui mesmo."
+
+
 def _generated_by(transaction_id):
-    """De onde veio o lançamento, se foi criado por outra tela. None se foi digitado."""
-    from app.models.loan import LoanRepayment
+    """Se o lançamento foi criado por outra tela, a explicação de onde mudar. None se foi digitado."""
+    from app.models.loan import Loan, LoanRepayment
     from app.models.market import MarketTrade
 
-    if LoanRepayment.query.filter(
+    repayment = LoanRepayment.query.filter(
         (LoanRepayment.transaction_id == transaction_id)
         | (LoanRepayment.partner_transaction_id == transaction_id)
-    ).first():
-        return "de um recebimento de empréstimo. Desfaça por lá, na tela de Empréstimos"
-    if MarketTrade.query.filter_by(transaction_id=transaction_id).first():
-        return "de uma compra ou venda no Mercado. Desfaça por lá"
+    ).first()
+    if repayment:
+        who = repayment.loan.borrower
+        return (
+            f"Esse lançamento é o recebimento do empréstimo de {who}: mudar só aqui deixaria o empréstimo "
+            f"com outro valor. Para corrigir o valor ou apagar, vá em Empréstimos, no card de {who}, em "
+            "Histórico, clique em \"desfazer\" nesse recebimento e registre de novo com o valor certo "
+            f"(se houver passos depois dele, desfaça do mais recente para trás). {_KEEP}"
+        )
+    trade = MarketTrade.query.filter_by(transaction_id=transaction_id).first()
+    if trade:
+        return (
+            f"Esse lançamento é a {'compra' if trade.side == 'buy' else 'venda'} de {trade.symbol.code} no Mercado. "
+            f"Para corrigir ou apagar, vá em Mercado, abra {trade.symbol.code}, apague o registro e lance de novo. {_KEEP}"
+        )
+    loan = Loan.query.filter_by(transaction_id=transaction_id).first()
+    if loan:
+        return (
+            f"Esse lançamento é a saída do empréstimo de {loan.borrower}. Para mudar o valor ou a conta, edite o "
+            f"empréstimo em Empréstimos (\"O dinheiro saiu de qual conta\"). {_KEEP}"
+        )
     return None
+
+
+def _mark_origins(items):
+    """Marca os lançamentos criados por outra tela: a tela mostra de onde vieram e manda corrigir por lá.
+
+    Três consultas para a página inteira, não uma por linha.
+    """
+    from app.models.loan import Loan, LoanRepayment
+    from app.models.market import MarketTrade
+
+    ids = [item["id"] for item in items]
+    origins = {}
+    for repayment in LoanRepayment.query.filter(
+        LoanRepayment.transaction_id.in_(ids) | LoanRepayment.partner_transaction_id.in_(ids)
+    ):
+        origin = {"kind": "loan", "label": f"do empréstimo de {repayment.loan.borrower}", "link": "/emprestimos"}
+        origins[repayment.transaction_id] = origins[repayment.partner_transaction_id] = origin
+    for loan in Loan.query.filter(Loan.transaction_id.in_(ids)):
+        origins[loan.transaction_id] = {"kind": "loan", "label": f"saída do empréstimo de {loan.borrower}", "link": "/emprestimos"}
+    for trade in MarketTrade.query.filter(MarketTrade.transaction_id.in_(ids)):
+        origins[trade.transaction_id] = {"kind": "market", "label": f"do Mercado ({trade.symbol.code})", "link": "/mercado"}
+    for item in items:
+        item["origin"] = origins.get(item["id"])
 
 
 def _eager():
@@ -88,6 +131,7 @@ def list_transactions():
     query = query.order_by(Transaction.date.desc(), Transaction.id.desc())
 
     result = paginate(query, lambda t: t.to_dict())
+    _mark_origins(result["items"])
 
     # Totais de TODAS as linhas do filtro, não só da página — senão o resumo
     # da tela mudaria conforme você navega.
@@ -201,7 +245,7 @@ def update_transaction(transaction_id):
         origin = _generated_by(transaction_id)
         if origin:
             db.session.rollback()
-            return jsonify({"error": f"Esse lançamento veio {origin}, para tudo ficar consistente."}), 400
+            return jsonify({"error": origin}), 400
 
     db.session.commit()
     return jsonify(transaction.to_dict())
@@ -215,7 +259,7 @@ def delete_transaction(transaction_id):
     # continuaria contando, e o valor sumiria sem rastro.
     origin = _generated_by(transaction_id)
     if origin:
-        return jsonify({"error": f"Esse lançamento veio {origin}, para tudo ficar consistente."}), 400
+        return jsonify({"error": origin}), 400
 
     db.session.delete(transaction)
     db.session.commit()

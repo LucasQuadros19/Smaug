@@ -4,12 +4,15 @@ import { Card } from "../ui/Card"
 import { Button } from "../ui/Button"
 import { Modal } from "../ui/Modal"
 import { ShoppingItemForm } from "./ShoppingItemForm"
+import { PurchaseForm } from "./PurchaseForm"
 import { ShoppingItemRow } from "./ShoppingItemRow"
 import { useShoppingItems, useShoppingItemMutations } from "../../hooks/useShoppingItems"
 import { useFormSubmit } from "../../hooks/useFormSubmit"
 import { formatCurrency } from "../../lib/format"
 import type { ShoppingItem } from "../../types"
 import type { ShoppingItemInput } from "../../api/shoppingItems"
+import { useConfirm } from "../../components/ui/ConfirmDialog"
+import { toastError } from "../../lib/toast"
 
 export function ShoppingListSection({
   playlistId,
@@ -20,9 +23,25 @@ export function ShoppingListSection({
 }) {
   const { data: items, isLoading } = useShoppingItems(playlistId)
   const { create, update, remove } = useShoppingItemMutations()
+  const ask = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<ShoppingItem | undefined>()
+  const [buying, setBuying] = useState<ShoppingItem | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
+  const purchase = useFormSubmit(() => setBuying(undefined))
+
+  const unmark = (item: ShoppingItem) => {
+    const run = () => update.mutateAsync({ id: item.id, data: { purchased: false } })
+    if (!item.transaction_id) return void run().catch(toastError)
+    ask({
+      title: "Desmarcar compra?",
+      message: `"${item.description}" volta para a lista de pendentes.`,
+      consequences: ["O gasto lançado junto sai do caixa e o saldo da conta volta."],
+      confirmLabel: "Desmarcar",
+      action: run,
+      done: "Compra desmarcada",
+    })
+  }
 
   const openCreate = () => {
     setEditing(undefined)
@@ -43,11 +62,14 @@ export function ShoppingListSection({
     )
   }
 
-  const handleDelete = (item: ShoppingItem) => {
-    if (window.confirm(`Excluir "${item.description}" da lista?`)) {
-      remove.mutate(item.id)
-    }
-  }
+  const handleDelete = (item: ShoppingItem) =>
+    ask({
+      title: "Tirar da lista?",
+      message: `"${item.description}" sai da lista de compras.`,
+      consequences: item.transaction_id ? ["O gasto já lançado no caixa continua — a compra aconteceu."] : undefined,
+      action: () => remove.mutateAsync(item.id),
+      done: "Item excluído",
+    })
 
   const pending = (items ?? []).filter((i) => !i.purchased)
   const purchased = (items ?? []).filter((i) => i.purchased)
@@ -100,9 +122,10 @@ export function ShoppingListSection({
                 <ShoppingItemRow
                   key={item.id}
                   item={item}
-                  onTogglePurchased={() =>
-                    update.mutate({ id: item.id, data: { purchased: true } })
-                  }
+                  onTogglePurchased={() => {
+                    purchase.reset()
+                    setBuying(item)
+                  }}
                   onEdit={() => openEdit(item)}
                   onDelete={() => handleDelete(item)}
                 />
@@ -116,9 +139,7 @@ export function ShoppingListSection({
                 <ShoppingItemRow
                   key={item.id}
                   item={item}
-                  onTogglePurchased={() =>
-                    update.mutate({ id: item.id, data: { purchased: false } })
-                  }
+                  onTogglePurchased={() => unmark(item)}
                   onEdit={() => openEdit(item)}
                   onDelete={() => handleDelete(item)}
                 />
@@ -127,6 +148,19 @@ export function ShoppingListSection({
           )}
         </div>
       )}
+
+      <Modal open={Boolean(buying)} onClose={() => setBuying(undefined)} title={`Comprei ${buying?.description ?? ""}`} error={purchase.error}>
+        {buying && (
+          <PurchaseForm
+            item={buying}
+            submitting={update.isPending}
+            onCancel={() => setBuying(undefined)}
+            onSubmit={(launch) =>
+              purchase.submit(update.mutateAsync({ id: buying.id, data: launch ? { purchased: true, launch } : { purchased: true } }))
+            }
+          />
+        )}
+      </Modal>
 
       <Modal
         open={modalOpen}

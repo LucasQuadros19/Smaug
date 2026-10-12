@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   loansApi,
   type LoanInput,
+  type PostponeInput,
   type RepaymentInput,
 } from "../api/loans"
 
@@ -30,7 +31,7 @@ export function useLoanMutations() {
     onSuccess: invalidate,
   })
   const remove = useMutation({
-    mutationFn: (id: number) => loansApi.remove(id),
+    mutationFn: ({ id, keepCash }: { id: number; keepCash: boolean }) => loansApi.remove(id, keepCash),
     onSuccess: invalidate,
   })
 
@@ -51,5 +52,14 @@ export function useLoanMutations() {
     onSuccess: invalidate,
   })
 
-  return { create, update, remove, addRepayment, settlePartners, removeRepayment }
+  const postpone = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: PostponeInput }) => loansApi.postpone(id, data),
+    onSuccess: invalidate,
+  })
+  const undoEvent = useMutation({
+    mutationFn: ({ id, eventId }: { id: number; eventId: number }) => loansApi.undoEvent(id, eventId),
+    onSuccess: invalidate,
+  })
+
+  return { create, update, remove, addRepayment, settlePartners, removeRepayment, postpone, undoEvent }
 }

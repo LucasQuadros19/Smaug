@@ -13,6 +13,8 @@ import { formatDate, isoDate } from "../lib/format"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { RecurringTransaction } from "../types"
 import type { LaunchRecurringInput, RecurringInput } from "../api/recurring"
+import { useConfirm } from "../components/ui/ConfirmDialog"
+import { toastError } from "../lib/toast"
 
 function addDays(iso: string, days: number) {
   const [y, m, d] = iso.split("-").map(Number)
@@ -84,6 +86,7 @@ function PostponeForm({
 export function Recurring() {
   const { data: items, isLoading } = useRecurring()
   const { create, update, remove, generate, launch, postpone } = useRecurringMutations()
+  const ask = useConfirm()
   const [postponing, setPostponing] = useState<RecurringTransaction | undefined>()
   const adiamento = useFormSubmit(() => setPostponing(undefined))
   const [modalOpen, setModalOpen] = useState(false)
@@ -116,11 +119,21 @@ export function Recurring() {
     if (launching) lancamento.submit(launch.mutateAsync({ id: launching.id, data }))
   }
 
-  const handleDelete = (item: RecurringTransaction) => {
-    if (confirm(`Excluir a recorrência "${item.description}"?`)) {
-      remove.mutate(item.id)
-    }
-  }
+  const handleDelete = (item: RecurringTransaction) =>
+    ask({
+      title: "Excluir recorrência?",
+      message: (
+        <>
+          <strong>{item.description}</strong> deixa de ser lançada.
+        </>
+      ),
+      consequences: [
+        "Os lançamentos que ela já gerou continuam no caixa.",
+        "Para só pausar, desligue em vez de excluir.",
+      ],
+      action: () => remove.mutateAsync(item.id),
+      done: "Recorrência excluída",
+    })
 
   return (
     <>
@@ -128,7 +141,7 @@ export function Recurring() {
         title="Recorrentes"
         action={
           <div className="flex items-center gap-3">
-            <Button variant="secondary" onClick={() => generate.mutate()} disabled={generate.isPending}>
+            <Button variant="secondary" onClick={() => generate.mutate(undefined, { onError: toastError })} disabled={generate.isPending}>
               <RefreshCw size={16} /> Gerar pendentes
             </Button>
             <Button onClick={openCreate}>
@@ -166,8 +179,8 @@ export function Recurring() {
                     item={item}
                     onEdit={() => openEdit(item)}
                     onDelete={() => handleDelete(item)}
-                    onToggleActive={() => update.mutate({ id: item.id, data: { active: !item.active } })}
-                    onToggleAuto={() => update.mutate({ id: item.id, data: { auto: !item.auto } })}
+                    onToggleActive={() => update.mutate({ id: item.id, data: { active: !item.active } }, { onError: toastError })}
+                    onToggleAuto={() => update.mutate({ id: item.id, data: { auto: !item.auto } }, { onError: toastError })}
                     onLaunch={() => openLaunch(item)}
                     onPostpone={() => {
                       adiamento.reset()

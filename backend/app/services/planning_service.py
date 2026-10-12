@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 
+from flask import g
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
@@ -9,6 +10,7 @@ from app.models.goal import Goal
 from app.models.loan import Loan
 from app.models.playlist_expectation import PlaylistExpectation
 from app.models.recurring import RecurringTransaction
+from app.user_settings import merged as merged_settings
 
 _LEVEL_ORDER = {"danger": 0, "warning": 1, "info": 2}
 
@@ -53,10 +55,16 @@ def get_alerts(summary: dict, include_budgets: bool) -> list:
             "/recorrentes",
         )
 
-    for loan in Loan.query.filter(Loan.status.in_(("active", "late"))):
+    grace = timedelta(days=merged_settings(g.user.settings)["grace_days"] if g.get("user") else 0)
+    loans = Loan.query.options(selectinload(Loan.participants), selectinload(Loan.repayments)).filter(
+        Loan.status.in_(("active", "late"))
+    )
+    for loan in loans:
         due = loan.due_date
-        if loan.status == "late" or (due and due < today):
+        if loan.status == "late" or (due and due + grace < today):
             detail = f"Venceu em {_dm(due)}" if due else "Marcado como atrasado"
+            if loan.interest_pending > 0:
+                detail += f" · {_brl(float(loan.interest_pending))} de juros em atraso"
             add("danger", f"Empréstimo de {loan.borrower} atrasado", detail, "/emprestimos")
         elif due and due <= today + timedelta(days=7):
             add("warning", f"Empréstimo de {loan.borrower} vence em breve", f"Vence em {_dm(due)}", "/emprestimos")

@@ -10,6 +10,32 @@ export interface User {
   id: string
   username: string
   hidden_tabs: string[]
+  settings: Settings
+}
+
+/** Padrões de mercado: o que já vem preenchido e como avaliar o que varia. */
+export interface Settings {
+  /** Empréstimos: % ao mês, meses e jeito de pagar que vêm no cadastro. */
+  loan_rate: number
+  loan_months: number
+  loan_schedule: LoanSchedule
+  /** % de multa e % ao mês de juros de mora (por dia) sobre o atrasado. */
+  late_fine: number
+  late_interest: number
+  /** Dias de tolerância antes de cobrar atraso. */
+  grace_days: number
+  /** Adiar cobra os juros do mês. */
+  postpone_charges: boolean
+  /** Vencimento em fim de semana ou feriado: avisa e sugere o próximo dia útil. */
+  business_days: boolean
+  /** R$ por ordem e % sobre a ordem em ações da B3. */
+  order_fee: number
+  b3_fee: number
+  /** IR estimado: % sobre o lucro e vendas no mês isentas até. */
+  stock_tax: number
+  stock_exempt: number
+  crypto_tax: number
+  crypto_exempt: number
 }
 
 export type ShareSection = "contas" | "patrimonio" | "emprestimos" | "mercado" | "calculos"
@@ -68,8 +94,8 @@ export interface Playlist {
   native_value: number
   /** Reais por unidade da moeda; null = nunca houve cotação (sem internet). */
   rate: number | null
-  /** "loans" = valor vem da tela de Empréstimos, não é digitado. */
-  auto_source: string | null
+  /** De onde vem o valor: "loans" (Empréstimos), "market" (tudo do Mercado, pela cotação) ou null (digitado). */
+  auto_source: "loans" | "market" | null
   asset_type: AssetType
   /** "capital" = lançamento vira valor; "declarado" = valor é cotação sua. */
   value_mode: "capital" | "declarado"
@@ -109,6 +135,8 @@ export interface ShoppingItem {
   priority: ShoppingPriority
   notes: string | null
   purchased: boolean
+  /** O gasto lançado no caixa quando marcou como comprado. */
+  transaction_id: number | null
   created_at: string
 }
 
@@ -125,6 +153,8 @@ export interface Transaction {
   category: Category | null
   account_name: string
   playlist: Playlist | null
+  /** Criado por outra tela (empréstimo, Mercado): o valor só muda por lá. Só vem na lista de Transações. */
+  origin?: { kind: "loan" | "market"; label: string; link: string } | null
   created_at: string
 }
 
@@ -256,15 +286,36 @@ export interface LoanParticipant {
   loan_id: number
   name: string
   contributed: number
+  /** Principal mais o ganho de todos os meses (sem a comissão). */
   to_receive: number
-  /** Comissão dessa pessoa, por cima do que ela recebe. */
+  /** Por mês: ganho de juros e comissão por cima. */
+  gain: number
   commission: number
   is_me: boolean
+}
+
+export type LoanSchedule = "interest_only" | "installments"
+
+/** Um passo na vida do empréstimo: recebimento ou adiamento. Só o último pode ser desfeito. */
+export interface LoanEvent {
+  id: number
+  kind: "receipt" | "postpone"
+  date: string
+  due_before: string | null
+  due_after: string | null
+  /** Fechou um mês de juros. */
+  charged: boolean
+  notes: string | null
+  parts: LoanRepayment[]
+  total: number
 }
 
 export interface LoanRepayment {
   id: number
   loan_id: number
+  /** principal tira dinheiro da rua; interest é lucro; fee é multa ou juros de atraso. */
+  kind: "principal" | "interest" | "fee"
+  event_id: number | null
   date: string
   amount: number
   my_share: number
@@ -280,9 +331,23 @@ export interface Loan {
   borrower: string
   amount: number
   interest_rate: number | null
-  /** Soma das comissões digitadas nos participantes. */
+  months: number
+  schedule: LoanSchedule
+  /** Meses cujos juros já venceram (recebidos ou não). */
+  months_charged: number
+  /** Juros vencidos que não voltaram: adiamento com juros ou pagamento parcial. */
+  interest_pending: number
+  events: LoanEvent[]
+  /** Juros de um mês: ganhos mais comissões. */
+  monthly_interest: number
+  my_monthly: number
+  /** Comissões por mês. */
   commission: number
-  /** Total a receber − total que entrou. */
+  my_interest_received: number
+  principal_outstanding: number
+  /** Sugestão do próximo recebimento. */
+  next_payment: { month: number; principal: number; my_principal: number; interest: number; my_interest: number }
+  /** Juros de todos os meses. */
   profit: number
   start_date: string
   due_date: string | null
@@ -302,6 +367,8 @@ export interface Loan {
   total_repaid: number
   /** Dinheiro de sócio no meu caixa esperando repasse. */
   pending_to_partners: number
+  /** A saída da minha conta quando emprestei. */
+  outflow: { account_id: number; amount: number; date: string } | null
   created_at: string
 }
 
@@ -435,6 +502,8 @@ export interface MarketTrade {
   quantity: number
   price: number
   fx_rate: number
+  /** Corretagem e taxas, em reais. */
+  fees: number
   account_id: number | null
   notes: string | null
 }
@@ -453,6 +522,14 @@ export interface MarketSymbol {
   trades: MarketTrade[]
 }
 
+export interface TaxLine {
+  sales: number
+  realized: number
+  exempt_until: number
+  rate: number
+  tax: number
+}
+
 export interface MarketOverview {
   symbols: MarketSymbol[]
   portfolio: {
@@ -464,6 +541,8 @@ export interface MarketOverview {
     day_change_pct: number | null
     missing_quotes: boolean
   }
+  /** IR estimado do mês (ações da B3 e cripto). */
+  tax: { month: string; stock: TaxLine; crypto: TaxLine }
 }
 
 export interface PricePoint {

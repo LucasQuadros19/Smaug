@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models.account import Account
 from app.models.playlist import Playlist
 from app.models.snapshot import Snapshot, SnapshotEntry
+from app.services.auto_value_service import auto_value_map
 from app.services.balance_service import get_balances_by_account
 from app.utils.pagination import paginate
 from app.utils.parse import find, iso_date, money, text
@@ -91,7 +92,12 @@ def _create_snapshot(payload):
         )
 
     db.session.commit()
-    return snapshot.to_dict(), None
+    return snapshot.to_dict(counting_ids()), None
+
+
+def counting_ids():
+    """Posições que contam no patrimônio: só elas somam no total do registro."""
+    return {pid for (pid,) in db.session.query(Playlist.id).filter(Playlist.counts_in_net_worth.is_(True))}
 
 
 @snapshots_bp.get("")
@@ -103,7 +109,8 @@ def list_snapshots():
         .options(selectinload(Snapshot.entries))
         .order_by(Snapshot.date.desc(), Snapshot.id.desc())
     )
-    return jsonify(paginate(query, lambda s: s.to_dict()))
+    counting = counting_ids()
+    return jsonify(paginate(query, lambda s: s.to_dict(counting)))
 
 
 @snapshots_bp.post("")
@@ -130,8 +137,10 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
 
     balances = get_balances_by_account(until=when)
     playlists = {p.id: p for p in Playlist.query.all()}
-    # Na moeda de cada posição; `amount` é sempre em reais.
-    positions = {pid: Decimal(p.opening_value or 0) for pid, p in playlists.items()}
+    # Na moeda de cada posição; `amount` é sempre em reais. Posição ligada a outra
+    # tela entra pelo valor de lá (o digitado nela não vale).
+    auto = auto_value_map(list(playlists.values()))
+    positions = {pid: auto.get(pid, Decimal(p.opening_value or 0)) for pid, p in playlists.items()}
     accounts = {
         a.id: Decimal(a.initial_balance or 0) + Decimal(balances.get(a.id, 0))
         for a in Account.query.all()
@@ -146,6 +155,8 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
         if kind == "playlist":
             if ref_id not in positions:
                 return f"posição {ref_id} não encontrada"
+            if playlists[ref_id].auto_source:
+                return f"'{playlists[ref_id].name}' vem de outra tela — registre por lá"
             rate = playlists[ref_id].rate
             if rate is None:
                 return f"Sem cotação de {playlists[ref_id].currency} ainda — confira a internet"
@@ -243,7 +254,9 @@ def settle():
         ), 400
 
     balances = get_balances_by_account(until=when)
-    positions = {p.id: Decimal(p.opening_value or 0) for p in Playlist.query.all()}
+    all_positions = Playlist.query.all()
+    auto = auto_value_map(all_positions)
+    positions = {p.id: auto.get(p.id, Decimal(p.opening_value or 0)) for p in all_positions}
     accounts = {
         a.id: Decimal(a.initial_balance or 0) + Decimal(balances.get(a.id, 0))
         for a in Account.query.all()

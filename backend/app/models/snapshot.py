@@ -20,7 +20,9 @@ class Snapshot(Owned, db.Model):
         "SnapshotEntry", backref="snapshot", cascade="all, delete-orphan"
     )
 
-    def to_dict(self):
+    def to_dict(self, counting=None):
+        """`counting`: ids das posições que contam no patrimônio. As outras aparecem
+        na linha, mas ficam fora do total — igual ao Dashboard."""
         positions = {}
         native = {}
         cash = {}
@@ -32,7 +34,7 @@ class Snapshot(Owned, db.Model):
             elif entry.account_id is not None:
                 cash[str(entry.account_id)] = float(entry.value)
 
-        invested = sum(positions.values())
+        invested = sum(v for pid, v in positions.items() if counting is None or int(pid) in counting)
         cash_total = sum(cash.values())
         return {
             "id": self.id,

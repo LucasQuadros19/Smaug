@@ -73,7 +73,7 @@ export function TransferForm({
         {positions.some((p) => p.auto_source) && (
           <>
             {" "}
-            Posições que puxam valor de outra tela (como Empréstimos) não aparecem aqui — registre
+            Posições que puxam valor de outra tela (Empréstimos, Mercado) não aparecem aqui — registre
             lá que o patrimônio acompanha.
           </>
         )}

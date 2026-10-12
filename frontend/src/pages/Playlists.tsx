@@ -9,10 +9,12 @@ import { usePlaylists, usePlaylistMutations } from "../hooks/usePlaylists"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { Playlist } from "../types"
 import type { PlaylistInput } from "../api/playlists"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 export function Playlists() {
   const { data: playlists, isLoading } = usePlaylists()
   const { create, update, remove } = usePlaylistMutations()
+  const ask = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Playlist | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
@@ -32,15 +34,17 @@ export function Playlists() {
     submit(editing ? update.mutateAsync({ id: editing.id, data }) : create.mutateAsync(data))
   }
 
-  const handleDelete = (playlist: Playlist) => {
-    if (
-      confirm(
-        `Excluir o grupo "${playlist.name}"? As transações já lançadas continuam no caixa geral, apenas deixam de estar agrupadas nele.`
-      )
-    ) {
-      remove.mutate(playlist.id)
-    }
-  }
+  const handleDelete = (playlist: Playlist) =>
+    ask({
+      title: "Excluir grupo?",
+      message: `O grupo "${playlist.name}" será apagado.`,
+      consequences: [
+        "Os lançamentos continuam no caixa; só deixam de estar marcados aqui.",
+        "Se estiver na Evolução, o sistema não deixa: desligue \"Contar no patrimônio\" ou zere o valor.",
+      ],
+      action: () => remove.mutateAsync(playlist.id),
+      done: "Grupo excluído",
+    })
 
   const groups = playlists?.filter((p) => p.kind === "group") ?? []
 

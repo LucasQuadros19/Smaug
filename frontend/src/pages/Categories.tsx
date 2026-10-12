@@ -10,10 +10,12 @@ import { useCategories, useCategoryMutations } from "../hooks/useCategories"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { Category } from "../types"
 import type { CategoryInput } from "../api/categories"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 export function Categories() {
   const { data: categories, isLoading } = useCategories()
   const { create, update, remove } = useCategoryMutations()
+  const ask = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Category | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
@@ -33,11 +35,18 @@ export function Categories() {
     submit(editing ? update.mutateAsync({ id: editing.id, data }) : create.mutateAsync(data))
   }
 
-  const handleDelete = (category: Category) => {
-    if (confirm(`Excluir a categoria "${category.name}"?`)) {
-      remove.mutate(category.id)
-    }
-  }
+  const handleDelete = (category: Category) =>
+    ask({
+      title: "Excluir categoria?",
+      message: (
+        <>
+          A categoria <strong>{category.name}</strong> será apagada.
+        </>
+      ),
+      consequences: ["Os lançamentos dela continuam, só ficam sem categoria.", "Os orçamentos dessa categoria são apagados."],
+      action: () => remove.mutateAsync(category.id),
+      done: "Categoria excluída",
+    })
 
   const income = categories?.filter((c) => c.type === "income") ?? []
   const expense = categories?.filter((c) => c.type === "expense") ?? []

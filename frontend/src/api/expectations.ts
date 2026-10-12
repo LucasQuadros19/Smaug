@@ -15,6 +15,9 @@ export type LaunchExpectationInput = {
   date?: string
   category_id?: number | null
   notes?: string | null
+  /** Depois de lançar: esperar de novo, encerrar ou (chegou só parte) o resto continua esperado. */
+  then?: "next" | "close" | "partial"
+  next_date?: string | null
 }
 
 export const expectationsApi = {

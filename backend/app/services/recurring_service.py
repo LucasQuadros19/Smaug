@@ -15,6 +15,10 @@ def _add_months(d: date, months: int, day: int) -> date:
     return date(year, month, min(day, calendar.monthrange(year, month)[1]))
 
 
+def add_months(d: date, months: int) -> date:
+    return _add_months(d, months, d.day)
+
+
 def next_due_after(current: date, frequency: str, day: int | None = None) -> date:
     """Próximo vencimento. Usada tanto pelo gerador automático quanto pelo
     lançamento manual, para os dois avançarem a data do mesmo jeito.

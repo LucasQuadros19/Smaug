@@ -8,6 +8,8 @@ export type TradeInput = {
   price: number
   date: string
   account_id?: number | null
+  /** Corretagem e taxas, em reais. */
+  fees?: number
   notes?: string | null
 }
 

@@ -5,6 +5,7 @@ import { Input, Label, Select } from "../ui/Input"
 import { ColorPicker } from "../ui/ColorPicker"
 import { IconPicker } from "../ui/IconPicker"
 import { Toggle } from "../ui/Toggle"
+import { SegmentedControl } from "../ui/SegmentedControl"
 import { useAccounts } from "../../hooks/useAccounts"
 import { formatCurrency, formatRate, todayISO } from "../../lib/format"
 import { useRates } from "../../hooks/useDashboard"
@@ -19,6 +20,8 @@ export interface AssetInitialEntry {
 }
 
 type ValueSource = "declare" | "account"
+/** De onde vem o valor: digitado à mão ou ligado a outra tela. */
+type Origin = "manual" | "loans" | "market"
 
 export function AssetForm({
   initial,
@@ -36,7 +39,8 @@ export function AssetForm({
   const [color, setColor] = useState(initial?.color ?? "#f59e0b")
   const [icon, setIcon] = useState(initial?.icon ?? "🤝")
   const [countsInNetWorth, setCountsInNetWorth] = useState(initial?.counts_in_net_worth ?? true)
-  const [fromLoans, setFromLoans] = useState(initial?.auto_source === "loans")
+  const [origin, setOrigin] = useState<Origin>(initial?.auto_source ?? "manual")
+  const fromLoans = origin !== "manual"
   const [assetType, setAssetType] = useState<AssetType>(initial?.asset_type ?? "investment")
   const [source, setSource] = useState<ValueSource>("declare")
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? "BRL")
@@ -68,7 +72,7 @@ export function AssetForm({
           counts_in_net_worth: countsInNetWorth,
           opening_value: declaring ? value : 0,
           currency: fromLoans ? "BRL" : currency,
-          auto_source: fromLoans ? "loans" : null,
+          auto_source: origin === "manual" ? null : origin,
           asset_type: assetType,
         }
         const initialEntry =
@@ -144,12 +148,29 @@ export function AssetForm({
         hint="Ligado para coisas que você recupera: empréstimo a receber, moto que pode ser vendida, investimento. Desligue se o dinheiro simplesmente foi embora."
       />
 
-      <Toggle
-        checked={fromLoans}
-        onChange={setFromLoans}
-        label="Puxar valor da tela de Empréstimos"
-        hint="Liga esta posição à tela de Empréstimos: o valor passa a ser a soma da sua parte nos empréstimos em aberto, atualizada sozinha. Deixe desligado para digitar o valor à mão."
-      />
+      <div>
+        <Label>Origem do valor</Label>
+        <SegmentedControl<Origin>
+          ariaLabel="Origem do valor"
+          value={origin}
+          onChange={setOrigin}
+          options={
+            origin === "market"
+              ? [{ value: "market", label: "Mercado (automático)" }]
+              : [
+                  { value: "manual", label: "Digitado" },
+                  { value: "loans", label: "Empréstimos" },
+                ]
+          }
+        />
+        <p className="mt-1.5 text-xs text-slate-400">
+          {origin === "manual"
+            ? "Você digita o valor (ou registra na Evolução). Não muda sozinho."
+            : origin === "loans"
+              ? "Ligada à tela de Empréstimos: vale a sua parte nos empréstimos em aberto, atualizada sozinha. As saídas e os retornos dos empréstimos viram patrimônio, não gasto."
+              : "É a posição do Mercado: vale tudo o que você tem lá, pela cotação de agora. Criada sozinha."}
+        </p>
+      </div>
 
       <div
         className={
@@ -180,7 +201,7 @@ export function AssetForm({
         <div>
           <Label>
             {fromLoans
-              ? "Valor (vem dos Empréstimos)"
+              ? `Valor (vem ${origin === "loans" ? "dos Empréstimos" : "do Mercado"})`
               : `Quanto vale esse ativo${foreign ? ` (em ${currency})` : ""}`}
           </Label>
           <Input

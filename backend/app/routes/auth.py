@@ -18,6 +18,7 @@ from app.models.category import DEFAULT_CATEGORIES, Category
 from app.models.user import User
 from app.routes.shares import apply_shared_view
 from app.tenancy import claim_orphans
+from app.user_settings import validate as validate_settings
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -182,5 +183,7 @@ def update_me():
         ):
             return jsonify({"error": "Lista de abas inválida"}), 400
         g.user.hidden_tabs = sorted(set(tabs))
+    if "settings" in data:
+        g.user.settings = {**(g.user.settings or {}), **validate_settings(data["settings"])}
     db.session.commit()
     return jsonify(g.user.to_dict())

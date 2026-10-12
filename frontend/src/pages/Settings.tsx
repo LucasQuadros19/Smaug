@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Topbar } from "../components/layout/Topbar"
 import { Card } from "../components/ui/Card"
 import { Toggle } from "../components/ui/Toggle"
+import { MarketDefaults } from "../components/settings/MarketDefaults"
 import { useHiddenTabs, useMe } from "../hooks/useMe"
 import { navSections } from "../lib/navigation"
 
@@ -22,7 +23,8 @@ export function Settings() {
   return (
     <>
       <Topbar title="Configurações" />
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+      <main className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+        <MarketDefaults />
         <Card className="max-w-2xl">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Abas da barra lateral</h3>
           <p className="mb-4 mt-1 text-xs text-slate-400">

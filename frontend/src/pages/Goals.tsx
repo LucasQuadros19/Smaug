@@ -12,6 +12,7 @@ import { usePlaylists } from "../hooks/usePlaylists"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { Goal } from "../types"
 import type { GoalInput } from "../api/goals"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 function GoalForm({
   initial,
@@ -104,6 +105,7 @@ function GoalForm({
 export function Goals() {
   const { data: goals, isLoading } = useGoals()
   const { create, update, remove } = useGoalMutations()
+  const ask = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Goal | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
@@ -150,7 +152,15 @@ export function Goals() {
                     <Pencil size={15} />
                   </button>
                   <button
-                    onClick={() => confirm(`Excluir a meta "${goal.name}"?`) && remove.mutate(goal.id)}
+                    onClick={() =>
+                      ask({
+                        title: "Excluir meta?",
+                        message: `A meta "${goal.name}" será apagada.`,
+                        consequences: ["Nada muda no patrimônio nem nas posições."],
+                        action: () => remove.mutateAsync(goal.id),
+                        done: "Meta excluída",
+                      })
+                    }
                     aria-label="Excluir meta"
                     className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
                   >

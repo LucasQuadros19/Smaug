@@ -3,7 +3,7 @@ from app.models.budget import Budget
 from app.models.calendar_event import CalendarEvent
 from app.models.category import Category
 from app.models.goal import Goal
-from app.models.loan import Loan, LoanParticipant
+from app.models.loan import Loan, LoanEvent, LoanParticipant
 from app.models.market import MarketSymbol, MarketTrade
 from app.models.playlist import Playlist
 from app.models.playlist_expectation import PlaylistExpectation
@@ -28,6 +28,7 @@ __all__ = [
     "SnapshotEntry",
     "Loan",
     "LoanParticipant",
+    "LoanEvent",
     "Goal",
     "Sheet",
     "MarketSymbol",

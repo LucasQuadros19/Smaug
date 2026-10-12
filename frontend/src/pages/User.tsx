@@ -12,6 +12,7 @@ import { useShareMutations, useShares } from "../hooks/useShares"
 import { firstTab, SHARE_SECTIONS } from "../lib/navigation"
 import { switchViewing } from "../lib/viewing"
 import type { Share, ShareSection } from "../types"
+import { useConfirm } from "../components/ui/ConfirmDialog"
 
 const heading = "text-sm font-semibold text-slate-700 dark:text-slate-200"
 const hint = "text-xs text-slate-400"
@@ -163,9 +164,16 @@ function ShareItem({ share }: { share: Share }) {
     switchViewing(client, { id: share.user.id, username: name, sections: share.they_share })
     navigate(firstTab(share.they_share))
   }
-  const finish = (question: string) => {
-    if (confirm(question)) end.mutate(share.id)
-  }
+  const ask = useConfirm()
+  const finish = (question: string) =>
+    ask({
+      title: question,
+      message: `${name} deixa de ver os seus dados, e você os dele.`,
+      consequences: ["Nada é apagado: os dados de cada um continuam com o dono.", "Dá para convidar de novo depois."],
+      confirmLabel: "Confirmar",
+      action: () => end.mutateAsync(share.id),
+      done: "Compartilhamento encerrado",
+    })
 
   return (
     <div className="space-y-3 rounded-xl border border-slate-100 p-4 dark:border-white/5">
