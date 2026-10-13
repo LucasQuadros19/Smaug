@@ -168,7 +168,7 @@ def test_rotas_da_propria_conta_ignoram_o_cabecalho(ana, entrar):
     assert pedir("get", "/api/auth/me").get_json()["username"] == "bia"
     pedir("put", "/api/auth/me", json={"hidden_tabs": ["/metas"]})
     assert bia.get("/api/auth/me").get_json()["hidden_tabs"] == ["/metas"]
-    assert ana.get("/api/auth/me").get_json()["hidden_tabs"] == []
+    assert ana.get("/api/auth/me").get_json()["hidden_tabs"] == ["/bot"]
     assert pedir("post", "/api/auth/password", json={"current": SENHA, "new": "outra-senha-1"}).status_code == 204
     assert ana.post("/api/auth/logout", json={}).status_code == 204
     assert ana.post("/api/auth/login", json={"username": "ana", "password": SENHA}).status_code == 200

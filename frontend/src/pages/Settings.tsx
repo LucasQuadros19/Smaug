@@ -3,6 +3,7 @@ import { Topbar } from "../components/layout/Topbar"
 import { Card } from "../components/ui/Card"
 import { Toggle } from "../components/ui/Toggle"
 import { MarketDefaults } from "../components/settings/MarketDefaults"
+import { SystemSettings } from "../components/settings/SystemSettings"
 import { useHiddenTabs, useMe } from "../hooks/useMe"
 import { navSections } from "../lib/navigation"
 
@@ -24,6 +25,7 @@ export function Settings() {
     <>
       <Topbar title="Configurações" />
       <main className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
+        <SystemSettings />
         <MarketDefaults />
         <Card className="max-w-2xl">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Abas da barra lateral</h3>
@@ -42,10 +44,11 @@ export function Settings() {
                     {title}
                   </p>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {links.map(({ to, label }) => (
+                    {links.map(({ to, label, dev }) => (
                       <Toggle
                         key={to}
                         label={label}
+                        hint={dev ? "Em desenvolvimento" : undefined}
                         checked={!hidden.has(to)}
                         onChange={(visible) => setVisible(to, visible)}
                       />

@@ -34,7 +34,10 @@ export const SHARE_SECTIONS: { key: ShareSection; label: string; hint: string }[
 type TabSection = ShareSection | "tudo" | "alguma" | null
 
 /** As abas da barra lateral. Todas podem ser escondidas em Configurações, menos o Dashboard. */
-export const navSections: { title: string | null; links: { to: string; label: string; icon: LucideIcon; section: TabSection }[] }[] = [
+export const navSections: {
+  title: string | null
+  links: { to: string; label: string; icon: LucideIcon; section: TabSection; dev?: boolean }[]
+}[] = [
   {
     title: null,
     links: [{ to: "/", label: "Dashboard", icon: LayoutDashboard, section: "tudo" }],
@@ -57,7 +60,7 @@ export const navSections: { title: string | null; links: { to: string; label: st
       { to: "/emprestimos", label: "Empréstimos", icon: HandCoins, section: "emprestimos" },
       { to: "/metas", label: "Metas", icon: Target, section: "patrimonio" },
       { to: "/mercado", label: "Mercado", icon: CandlestickChart, section: "mercado" },
-      { to: "/bot", label: "Bot", icon: Bot, section: null },
+      { to: "/bot", label: "Bot", icon: Bot, section: null, dev: true },
     ],
   },
   {

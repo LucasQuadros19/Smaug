@@ -57,10 +57,20 @@ def test_padroes_vem_preenchidos_e_so_o_que_muda_e_guardado(client):
 
 @pytest.mark.parametrize(
     "patch",
-    [{"inventado": 1}, {"late_fine": -1}, {"loan_months": 1.5}, {"business_days": 1}, {"loan_schedule": "anual"}, {"stock_tax": "15"}, []],
+    [
+        {"inventado": 1}, {"late_fine": -1}, {"loan_months": 1.5}, {"business_days": 1}, {"loan_schedule": "anual"},
+        {"stock_tax": "15"}, [], {"theme": "azul"}, {"start_page": "https://fora.com"}, {"hide_values": "sim"},
+    ],
 )
 def test_padrao_invalido_e_recusado(client, patch):
     assert client.put("/api/auth/me", json={"settings": patch}).status_code == 400
+
+
+def test_padroes_do_sistema(client):
+    settings = client.get("/api/auth/me").get_json()["settings"]
+    assert (settings["theme"], settings["hide_values"], settings["start_page"], settings["week_starts_monday"]) == ("dark", False, "/", False)
+    patch = {"theme": "system", "hide_values": True, "start_page": "/emprestimos", "week_starts_monday": True}
+    assert client.put("/api/auth/me", json={"settings": patch}).get_json()["settings"] | patch == client.get("/api/auth/me").get_json()["settings"]
 
 
 # --- Mercado no patrimônio ----------------------------------------------------

@@ -69,7 +69,7 @@ def test_primeira_conta_fica_com_os_dados_de_antes(entrar, app_limpo):
     assert [a["name"] for a in ana.get("/api/accounts").get_json()] == ["Conta antiga"]
     # Já tinha categoria: não ganha as padrão por cima.
     assert [c["name"] for c in ana.get("/api/categories").get_json()] == ["Categoria antiga"]
-    assert ana.get("/api/auth/me").get_json()["hidden_tabs"] == []
+    assert ana.get("/api/auth/me").get_json()["hidden_tabs"] == ["/bot"]
 
     bia = entrar("bia")
     assert bia.get("/api/accounts").get_json() == []

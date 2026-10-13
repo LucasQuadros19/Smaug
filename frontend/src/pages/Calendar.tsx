@@ -9,6 +9,7 @@ import { Modal } from "../components/ui/Modal"
 import { MonthSwitcher } from "../components/ui/MonthSwitcher"
 import { EventForm } from "../components/calendar/EventForm"
 import { useCalendar, useCalendarMutations } from "../hooks/useCalendar"
+import { useSettings } from "../hooks/useMe"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import { currentMonth, formatCurrency, isoDate, todayISO } from "../lib/format"
 import { holidayName } from "../lib/businessDays"
@@ -25,15 +26,16 @@ const KINDS: Record<CalendarKind, { label: string; chip: string; dot: string }> 
   event: { label: "Eventos", chip: "bg-violet-500/10 text-violet-700 dark:text-violet-300", dot: "bg-violet-500" },
 }
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+const WEEKDAYS_MONDAY = [...WEEKDAYS.slice(1), WEEKDAYS[0]]
 const STATUS_LABEL = { done: "feito", overdue: "atrasado", postponed: "adiado" }
 
-/** Semanas do mês, de domingo a sábado; os dias de fora vêm como null. */
-function weeksOf(month: string): (string | null)[][] {
+/** Semanas do mês, de domingo a sábado (ou de segunda a domingo); os dias de fora vêm como null. */
+function weeksOf(month: string, mondayFirst = false): (string | null)[][] {
   const [year, m] = month.split("-").map(Number)
   const first = new Date(year, m - 1, 1)
   const days = new Date(year, m, 0).getDate()
   const cells: (string | null)[] = [
-    ...Array<null>(first.getDay()).fill(null),
+    ...Array<null>(mondayFirst ? (first.getDay() + 6) % 7 : first.getDay()).fill(null),
     ...Array.from({ length: days }, (_, i) => isoDate(new Date(year, m - 1, i + 1))),
   ]
   while (cells.length % 7) cells.push(null)
@@ -62,6 +64,7 @@ function signed(item: CalendarItem) {
 
 export function Calendar() {
   const [month, setMonth] = useState(currentMonth())
+  const mondayFirst = useSettings().settings.week_starts_monday
   const [hidden, setHidden] = useState<Set<CalendarKind>>(new Set())
   const [picked, setPicked] = useState<string | null>(null)
   const [modal, setModal] = useState<{ event?: CalendarEvent; date: string } | null>(null)
@@ -162,14 +165,14 @@ export function Calendar() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <Card className={clsx("overflow-hidden p-0!", isLoading && "opacity-60")}>
             <div className="grid grid-cols-7 border-b border-slate-100 text-center text-[11px] font-medium text-slate-400 dark:border-white/5">
-              {WEEKDAYS.map((d) => (
+              {(mondayFirst ? WEEKDAYS_MONDAY : WEEKDAYS).map((d) => (
                 <div key={d} className="py-2">
                   {d}
                 </div>
               ))}
             </div>
             <div className="grid grid-cols-7">
-              {weeksOf(month).flat().map((day, index) => {
+              {weeksOf(month, mondayFirst).flat().map((day, index) => {
                 if (!day) return <div key={index} className="min-h-14 border-b border-r border-slate-100 bg-slate-50/50 [&:nth-child(7n)]:border-r-0 sm:min-h-24 dark:border-white/5 dark:bg-white/[0.01]" />
                 const list = byDay.get(day) ?? []
                 const overdue = list.some((i) => i.status === "overdue")

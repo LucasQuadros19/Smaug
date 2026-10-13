@@ -2,11 +2,12 @@ import { useEffect } from "react"
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query"
 import { RouterProvider } from "react-router-dom"
 import { ApiError } from "./api/client"
-import { ThemeProvider } from "./context/ThemeContext"
+import { ThemeProvider, useTheme } from "./context/ThemeContext"
 import { ConfirmProvider } from "./components/ui/ConfirmDialog"
 import { Toaster } from "./components/ui/Toaster"
 import { recurringApi } from "./api/recurring"
 import { setSessionUser, useMe } from "./hooks/useMe"
+import { setHideValues } from "./lib/format"
 import { getViewing } from "./lib/viewing"
 import { Login } from "./pages/Login"
 import { router } from "./router"
@@ -51,12 +52,25 @@ function AutoGenerateRecurring() {
 
 function Gate() {
   const { data: user, isPending } = useMe()
+  const { setPreference } = useTheme()
+  const theme = user?.settings.theme
+  useEffect(() => {
+    if (theme) setPreference(theme)
+  }, [theme, setPreference])
+  // Ao entrar (login ou recarregar no Dashboard), abre a aba escolhida.
+  const startPage = user?.settings.start_page
+  useEffect(() => {
+    if (startPage && startPage !== "/" && router.state.location.pathname === "/") router.navigate(startPage, { replace: true })
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (isPending) return null
   if (!user) return <Login />
+  setHideValues(user.settings.hide_values)
   return (
     <>
       <AutoGenerateRecurring />
-      <RouterProvider router={router} />
+      {/* Trocar "esconder valores" redesenha as telas com o formato novo. */}
+      <RouterProvider key={String(user.settings.hide_values)} router={router} />
     </>
   )
 }

@@ -36,6 +36,11 @@ export interface Settings {
   stock_exempt: number
   crypto_tax: number
   crypto_exempt: number
+  /** Sistema: tema, valores escondidos, aba ao entrar e começo da semana no calendário. */
+  theme: "dark" | "light" | "system"
+  hide_values: boolean
+  start_page: string
+  week_starts_monday: boolean
 }
 
 export type ShareSection = "contas" | "patrimonio" | "emprestimos" | "mercado" | "calculos"

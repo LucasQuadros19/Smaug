@@ -3,8 +3,14 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 })
 
+// "Esconder valores" (Configurações): o App liga antes de desenhar as telas.
+let hideValues = false
+export function setHideValues(hide: boolean) {
+  hideValues = hide
+}
+
 export function formatCurrency(value: number): string {
-  return currencyFormatter.format(value)
+  return hideValues ? "R$ •••" : currencyFormatter.format(value)
 }
 
 const rateFormatter = new Intl.NumberFormat("pt-BR", {
@@ -22,6 +28,7 @@ export function formatRate(value: number): string {
 /** Valor na moeda da posição. BTC com 8 casas: 0,05 BTC precisa aparecer. */
 export function formatMoney(value: number, currency: string = "BRL"): string {
   if (currency === "BRL") return formatCurrency(value)
+  if (hideValues) return `${currency} •••`
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency,

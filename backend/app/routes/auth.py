@@ -101,7 +101,7 @@ def signup():
     user = User(
         username=username,
         password_hash=generate_password_hash(password),
-        hidden_tabs=[] if first else list(DEFAULT_HIDDEN_TABS),
+        hidden_tabs=["/bot"] if first else list(DEFAULT_HIDDEN_TABS),
     )
     db.session.add(user)
     try:

@@ -1,7 +1,7 @@
-"""Padrões de mercado: o que já vem preenchido e como avaliar o que varia.
+"""Configurações do usuário: padrões de mercado e do sistema.
 
 Cada usuário guarda só o que mudou; o resto vem de DEFAULTS. Mudar um padrão
-não mexe no que já foi registrado — vale para os próximos cadastros.
+de mercado não mexe no que já foi registrado — vale para os próximos cadastros.
 """
 
 from werkzeug.exceptions import BadRequest
@@ -23,9 +23,21 @@ DEFAULTS = {
     "stock_exempt": 20000.0,  # vendas de ações no mês até este valor: isento
     "crypto_tax": 15.0,
     "crypto_exempt": 35000.0,
+    # Sistema
+    "theme": "dark",  # dark, light ou system (segue o aparelho)
+    "hide_values": False,  # mostra R$ ••• no lugar dos valores
+    "start_page": "/",  # aba que abre ao entrar
+    "week_starts_monday": False,  # calendário de segunda a domingo
 }
 
-_CHOICES = {"loan_schedule": ("interest_only", "installments")}
+_CHOICES = {
+    "loan_schedule": ("interest_only", "installments"),
+    "theme": ("dark", "light", "system"),
+    "start_page": (
+        "/", "/calendario", "/transacoes", "/recorrentes", "/orcamentos", "/lista-compras", "/patrimonio", "/ativos",
+        "/emprestimos", "/metas", "/mercado", "/bot", "/grupos", "/contas", "/categorias", "/calculos",
+    ),
+}
 _LIMITS = {
     "loan_rate": (0, 100),
     "loan_months": (1, 600),
