@@ -19,15 +19,38 @@ encerrar() {
   echo "Encerrando..."
   # Mata o grupo de processos: sem isso o Vite e o Flask ficam rodando soltos.
   [ -n "${PID_BACK:-}" ] && kill "$PID_BACK" 2>/dev/null || true
+  [ -n "${PID_BOT:-}" ] && kill "$PID_BOT" 2>/dev/null || true
   [ -n "${PID_FRONT:-}" ] && kill "$PID_FRONT" 2>/dev/null || true
   wait 2>/dev/null || true
 }
 trap encerrar EXIT INT TERM
 
-echo "1/3  Banco (Docker)..."
+echo "1/4  Banco (Docker)..."
 docker compose up -d db backup >/dev/null
 
-echo "2/3  Backend..."
+echo "2/4  Bot..."
+# Opcional: a API do bot-trader, se o repositório estiver ao lado deste com o venv criado.
+# Robôs que estavam ligados voltam sozinhos; com o Ctrl+C eles param (stop e alvo seguem na Bybit).
+BOT="$RAIZ/../bot-trader"
+if [ ! -x "$BOT/venv/bin/uvicorn" ]; then
+  echo "     sem ../bot-trader/venv: a tela do bot fica sem servidor"
+elif lsof -ti:8000 >/dev/null 2>&1; then
+  echo "     a porta 8000 já está em uso: a tela vai usar o bot que já está rodando"
+else
+  (cd "$BOT/src" && exec ../venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000 >/tmp/bot-trader.log 2>&1) &
+  PID_BOT=$!
+  for _ in $(seq 1 20); do
+    curl -s -o /dev/null http://127.0.0.1:8000/health && break
+    sleep 0.5
+  done
+  if ! curl -s -o /dev/null http://127.0.0.1:8000/health; then
+    echo "     o bot não subiu (o Smaug segue sem ele). Motivo em /tmp/bot-trader.log:"
+    tail -3 /tmp/bot-trader.log | sed 's/^/       /'
+    PID_BOT=""
+  fi
+fi
+
+echo "3/4  Backend..."
 cd "$RAIZ/backend"
 
 # Se já houver algo na 5001, subir de novo falha em silêncio e o script segue
@@ -62,7 +85,7 @@ if ! curl -s -o /dev/null http://127.0.0.1:5001/api/auth/me; then
   exit 1
 fi
 
-echo "3/3  Frontend..."
+echo "4/4  Frontend..."
 cd "$RAIZ/frontend"
 npm run dev >/tmp/saldos-frontend.log 2>&1 &
 PID_FRONT=$!
@@ -75,7 +98,7 @@ echo ""
 echo "    Nesta máquina:  http://localhost:5173"
 echo "    Na rede local:  http://$IP:5173"
 echo ""
-echo "  Logs: /tmp/saldos-backend.log e /tmp/saldos-frontend.log"
+echo "  Logs: /tmp/saldos-backend.log, /tmp/saldos-frontend.log e /tmp/bot-trader.log"
 echo "  Ctrl+C encerra tudo."
 echo ""
 

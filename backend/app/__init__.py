@@ -24,6 +24,7 @@ def create_app(config_overrides=None):
 
     from app.routes.accounts import accounts_bp
     from app.routes.auth import auth_bp, load_user
+    from app.routes.bot import bot_bp
     from app.routes.budgets import budgets_bp
     from app.routes.calendar import calendar_bp
     from app.routes.categories import categories_bp
@@ -59,6 +60,7 @@ def create_app(config_overrides=None):
     app.register_blueprint(market_bp, url_prefix="/api/market")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(shares_bp, url_prefix="/api/shares")
+    app.register_blueprint(bot_bp, url_prefix="/api/bot")
 
     app.before_request(load_user)
 

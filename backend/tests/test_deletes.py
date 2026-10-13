@@ -8,7 +8,11 @@ from app.services import market_service
 
 
 def test_toda_exclusao_de_id_que_nao_existe_e_404(client, app):
-    rotas = [r for r in app.url_map.iter_rules() if "DELETE" in r.methods and r.rule.startswith("/api/")]
+    # A ponte do bot só repassa (e tem os testes dela em test_bot.py).
+    rotas = [
+        r for r in app.url_map.iter_rules()
+        if "DELETE" in r.methods and r.rule.startswith("/api/") and not r.rule.startswith("/api/bot/")
+    ]
     assert rotas
     for rota in rotas:
         url = rota.rule

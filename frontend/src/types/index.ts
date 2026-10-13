@@ -582,3 +582,144 @@ export interface CalendarItem {
   /** Só nos eventos livres: para editar. */
   event?: CalendarEvent
 }
+
+// --- Bot (API do bot-trader, pela ponte /api/bot do Smaug) ---------------------
+
+export type BotStrategyId = "long_short" | "dual_params" | "compra" | "venda"
+export type BotTimeframe = "5" | "15" | "30" | "60" | "120" | "240"
+
+export interface BotParams {
+  ema_rapida: number
+  ema_lenta: number
+  qtd_velas_stop: number
+  /** Alvo em múltiplos da distância do stop. */
+  risco_retorno: number
+}
+
+export interface BotConfig {
+  estrategia: BotStrategyId
+  cripto: string
+  tempo_grafico: BotTimeframe
+  compra: BotParams | null
+  venda: BotParams | null
+  alavancagem: number
+  /** null: entra com o saldo inteiro. */
+  risco_pct: number | null
+}
+
+export type BotSimulationInput = BotConfig & {
+  dias: number
+  capital: number
+  /** As duas juntas trocam os "últimos N dias" por um período fechado (AAAA-MM-DD). */
+  de?: string | null
+  ate?: string | null
+  /** Presente: simula a carteira (a mesma regra em várias moedas, cada uma arriscando risco_pct do capital). */
+  moedas?: string[]
+}
+export type BotRobotInput = BotConfig & { nome: string; subconta: number }
+
+export interface BotCatalog {
+  estrategias: {
+    id: BotStrategyId
+    nome: string
+    script: string
+    descricao: string
+    padrao: { compra: BotParams | null; venda: BotParams | null }
+  }[]
+  prontos: { nome: string; parametros: BotParams }[]
+  tempos: { valor: BotTimeframe; nome: string }[]
+  taxa: number
+  deslizamento: number
+  carteira: { moedas: string[]; parametros: BotParams; risco_pct: number; alavancagem: number }
+}
+
+export interface BotSimulationSummary {
+  capital: number
+  final: number
+  retorno_pct: number
+  buy_hold_pct: number
+  max_queda_pct: number
+  operacoes: number
+  acerto_pct: number | null
+  fator_lucro: number | null
+  media_r: number | null
+  maior_seq_perdas: number
+  taxas: number
+  exposicao_pct: number
+  quebrou: boolean
+  inicio: number
+  fim: number
+  /** Velas com sinal em que o saldo não alcançou o lote mínimo do par. */
+  puladas?: number
+}
+
+export interface BotSimulatedTrade {
+  cripto?: string
+  lado: "compra" | "venda"
+  entrada_em: number
+  saida_em: number
+  entrada: number
+  saida: number
+  stop: number
+  alvo: number
+  motivo: "stop" | "alvo"
+  resultado: number
+  resultado_pct: number
+  r: number
+}
+
+export interface BotSimulationResult {
+  resumo: BotSimulationSummary
+  /** Um ponto por dia: saldo (v) e quanto valeria só comprando e segurando (bh). */
+  curva: { t: number; v: number; bh: number }[]
+  operacoes: BotSimulatedTrade[]
+  total_operacoes: number
+  por_moeda?: { cripto: string; retorno_pct: number; buy_hold_pct: number; max_queda_pct: number; operacoes: number; puladas: number }[]
+}
+
+export interface BotRobot {
+  id: string
+  config: BotRobotInput
+  ativo: boolean
+  criado_em: string
+  status: "ligado" | "desligado" | "erro"
+  erro: string | null
+}
+
+export interface BotLog {
+  quando: string
+  nivel: string
+  categoria: string
+  mensagem: string
+  detalhes: string
+}
+
+export interface BotClosedTrade {
+  lado: "compra" | "venda"
+  quantidade: number
+  entrada: number
+  saida: number
+  resultado: number
+  quando: number
+}
+
+export interface BotPosition {
+  cripto: string
+  lado: "compra" | "venda"
+  tamanho: number
+  entrada: number
+  stop: number | null
+  alvo: number | null
+  resultado_aberto: number | null
+}
+
+export interface BotAccounts {
+  testnet: boolean
+  subcontas: {
+    subconta: number
+    patrimonio: number | null
+    disponivel: number | null
+    posicoes: BotPosition[]
+    erro: string | null
+  }[]
+}
