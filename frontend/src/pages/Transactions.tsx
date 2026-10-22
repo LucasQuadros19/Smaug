@@ -62,7 +62,9 @@ export function Transactions() {
       ),
       consequences: [
         `O saldo da conta ${tx.type === "income" ? "diminui" : "aumenta"} ${formatCurrency(tx.amount)}.`,
-        "Lançamentos que vieram de empréstimo ou do Mercado só saem por lá — o sistema avisa.",
+        tx.transfer
+          ? "Faz parte de um Aportei/Vendi/Transferir da planilha: a outra ponta sai junto."
+          : "Lançamentos que vieram de empréstimo ou do Mercado só saem por lá — o sistema avisa.",
       ],
       action: () => remove.mutateAsync(tx.id),
       done: "Lançamento excluído",

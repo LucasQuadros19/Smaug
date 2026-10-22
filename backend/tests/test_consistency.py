@@ -66,7 +66,7 @@ def test_transferir_o_valor_exato_ainda_funciona(client, cenario, summary):
     )
     assert response.status_code == 201
 
-    valores = {p["name"]: p["opening_value"] for p in summary()["playlists_summary"]}
+    valores = {p["name"]: p["outstanding"] for p in summary()["playlists_summary"]}
     assert valores["obra"] == 0
     assert valores["cripto"] == 1_000
 

@@ -28,7 +28,7 @@ def test_transferencia_preserva_o_patrimonio(client, make_account, make_position
 
     depois = summary()
     assert depois["net_worth"] == antes  # só mudou de lugar
-    valores = {p["name"]: p["opening_value"] for p in depois["playlists_summary"]}
+    valores = {p["name"]: p["outstanding"] for p in depois["playlists_summary"]}
     assert valores["obra"] == 30_000
     assert valores["cripto"] == 20_000
 

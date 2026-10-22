@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "../ui/Button"
 import { Input, Label, Select } from "../ui/Input"
 import { formatCurrency, todayISO } from "../../lib/format"
+import { currentValue } from "../../lib/asset"
 import type { Account, Playlist } from "../../types"
 import type { InvestInput } from "../../api/snapshots"
 
@@ -55,13 +56,13 @@ export function InvestForm({
         <Select value={playlistId} onChange={(e) => setPlaylistId(Number(e.target.value))}>
           {targets.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.icon} {p.name} — {formatCurrency(p.opening_value ?? 0)}
+              {p.icon} {p.name} — {formatCurrency(currentValue(p))}
             </option>
           ))}
         </Select>
         {target && value > 0 && (
           <p className="mt-1 text-xs text-slate-400">
-            fica {formatCurrency((target.opening_value ?? 0) + value)}
+            fica {formatCurrency(currentValue(target) + value)}
           </p>
         )}
       </div>

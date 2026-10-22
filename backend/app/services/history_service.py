@@ -18,16 +18,17 @@ def exclude_asset_moves(query):
     """Tira das receitas e despesas o dinheiro que só mudou de forma.
 
     Vale para ativos de capital (empréstimo, investimento, obra): aportar não é
-    gasto. Não vale para ativos de valor declarado (veículo, imóvel) — abastecer
+    gasto. Nem as transferências da planilha (Aportei, Vendi, Transferir). Não vale para ativos de valor declarado (veículo, imóvel) — abastecer
     a moto é despesa de verdade, o dinheiro foi embora. Dashboard, gráfico e
     orçamentos usam esta mesma regra.
     """
     return query.outerjoin(Playlist, Transaction.playlist_id == Playlist.id).filter(
+        Transaction.transfer_group.is_(None),
         or_(
             Transaction.playlist_id.is_(None),
             Playlist.kind != "asset",
             Playlist.asset_type.in_(DECLARED_ASSET_TYPES),
-        )
+        ),
     )
 
 

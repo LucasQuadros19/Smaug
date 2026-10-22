@@ -161,6 +161,8 @@ export interface Transaction {
   playlist: Playlist | null
   /** Criado por outra tela (empréstimo, Mercado): o valor só muda por lá. Só vem na lista de Transações. */
   origin?: { kind: "loan" | "market"; label: string; link: string } | null
+  /** Parte de um Aportei/Vendi/Transferir da planilha: não é receita nem despesa, e sai junto com a outra ponta. */
+  transfer: boolean
   created_at: string
 }
 

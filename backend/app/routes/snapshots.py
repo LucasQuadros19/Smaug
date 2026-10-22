@@ -1,3 +1,4 @@
+import uuid
 from datetime import date as date_cls
 from decimal import Decimal
 
@@ -20,6 +21,34 @@ snapshots_bp = Blueprint("snapshots", __name__)
 NATIVE_PLACES = Decimal("0.00000001")
 
 FORCED_EDIT = "Editado à força (planilha)"
+BALANCE_FIX = "Ajuste de saldo (planilha)"
+
+
+def _record_move(legs, when, description, notes=None):
+    """Lança no Caixa um Aportei/Vendi/Transferir. `legs`: [(tipo, objeto, sai?, valor)].
+
+    Conta: sair é despesa, entrar é receita. Ativo de capital: sair é retorno e
+    entrar é aporte, sem conta. Ativo de valor declarado não ganha lançamento
+    (o lançamento não mexe no valor dele): o registro acerta o valor. Conta e
+    ativo de capital no mesmo sentido viram um lançamento só, como um aporte
+    lançado à mão no Caixa.
+    """
+    rows = []
+    for kind, obj, leaving, amount in legs:
+        if kind == "account":
+            rows.append({"account_id": obj.id, "playlist_id": None, "type": "expense" if leaving else "income", "amount": amount})
+        elif obj.value_mode == "capital":
+            rows.append({"account_id": None, "playlist_id": obj.id, "type": "income" if leaving else "expense", "amount": amount})
+    cash = [r for r in rows if r["account_id"]]
+    held = [r for r in rows if r["playlist_id"]]
+    if len(cash) == 1 and len(held) == 1 and cash[0]["type"] == held[0]["type"]:
+        rows = [{**cash[0], "playlist_id": held[0]["playlist_id"]}]
+    group = uuid.uuid4()
+    for row in rows:
+        db.session.add(
+            Transaction(description=description[:200], date=when, notes=(notes or None) and notes[:500], transfer_group=group, **row)
+        )
+    db.session.flush()
 
 
 def _moved(playlist, totals):
@@ -51,7 +80,7 @@ def current_values(playlists):
     return values
 
 
-def _set_value(playlist, target, current, totals, when, forced):
+def set_value(playlist, target, current, totals, when, forced=False):
     """Faz a posição valer `target` (na moeda dela) em todo o sistema.
 
     O valor de um ativo de capital é o digitado + os lançamentos, então o
@@ -80,7 +109,7 @@ def _set_value(playlist, target, current, totals, when, forced):
 def _create_snapshot(payload, forced=False):
     """Cria o registro e faz o resto do sistema concordar com ele.
 
-    `forced`: valores digitados à mão no "Novo registro" (ver `_set_value`).
+    `forced`: valores digitados à mão no "Novo registro" (ver `set_value`).
     Retorna (dict, None) em caso de sucesso ou (None, (mensagem, status)).
     """
     when = payload.get("date")
@@ -130,14 +159,25 @@ def _create_snapshot(payload, forced=False):
             # guarda o valor do dia, mas não sobrescreve de onde ele vem.
             target = native_value if native_value is not None else value
             if not playlist.auto_source and target != current[playlist.id]:
-                _set_value(playlist, target, current[playlist.id], totals, when, forced)
+                set_value(playlist, target, current[playlist.id], totals, when, forced)
         elif account_id:
             account = find(Account, account_id)
             if not account:
                 db.session.rollback()
                 return None, (f"account_id {account_id} inválido", 400)
-            # O saldo naquela data passa a ser o valor registrado.
-            account.initial_balance = value - Decimal(moved.get(account_id) or 0)
+            # O saldo naquela data passa a ser o valor registrado. A diferença
+            # vira lançamento no Caixa: corrigir o saldo não pode ser invisível.
+            diff = value - Decimal(account.initial_balance or 0) - Decimal(moved.get(account.id) or 0)
+            if diff:
+                db.session.add(
+                    Transaction(
+                        account_id=account.id,
+                        description=BALANCE_FIX,
+                        amount=abs(diff),
+                        type="income" if diff > 0 else "expense",
+                        date=when,
+                    )
+                )
         else:
             db.session.rollback()
             return None, ("Cada entrada precisa de playlist_id ou account_id", 400)
@@ -202,8 +242,8 @@ def create_snapshot():
     return jsonify(result), 201
 
 
-def transfer_between(origin, target, raw_amount, when=None, notes=None):
-    """Move um valor de um lugar para outro, gerando um registro novo.
+def transfer_between(origin, target, raw_amount, when=None, notes=None, description=None):
+    """Move um valor de um lugar para outro: lança no Caixa e gera um registro novo.
 
     Nada some nem aparece do nada: o patrimônio total continua igual, só muda
     onde o dinheiro está.
@@ -220,10 +260,12 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
     playlists = {p.id: p for p in Playlist.query.all()}
     # Na moeda de cada posição; `amount` é sempre em reais.
     positions = current_values(list(playlists.values()))
+    account_rows = {a.id: a for a in Account.query.all()}
     accounts = {
         a.id: Decimal(a.initial_balance or 0) + Decimal(balances.get(a.id, 0))
-        for a in Account.query.all()
+        for a in account_rows.values()
     }
+    legs = []
 
     def apply(ref, delta):
         kind = ref.get("type")
@@ -246,10 +288,12 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
                 name = playlists[ref_id].name
                 return f"'{name}' não tem esse valor: só há {available:.2f} disponível"
             positions[ref_id] = (positions[ref_id] + delta / rate).quantize(NATIVE_PLACES)
+            legs.append(("playlist", playlists[ref_id], delta < 0, amount))
         elif kind == "account":
             if ref_id not in accounts:
                 return f"conta {ref_id} não encontrada"
             accounts[ref_id] += delta
+            legs.append(("account", account_rows[ref_id], delta < 0, amount))
         else:
             return f"type inválido: {kind}"
         return None
@@ -258,6 +302,9 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
         problem = apply(ref, delta)
         if problem:
             return jsonify({"error": problem}), 400
+
+    names = [obj.name for _, obj, _, _ in legs]
+    _record_move(legs, when, description or f"Transferência: {names[0]} → {names[1]}", notes)
 
     entries = [{"playlist_id": pid, "value": v} for pid, v in positions.items()]
     entries += [{"account_id": aid, "value": v} for aid, v in accounts.items()]
@@ -347,6 +394,12 @@ def settle():
         else (positions[playlist.id] - reduce_by / rate).quantize(NATIVE_PLACES)
     )
     accounts[account.id] += received
+    _record_move(
+        [("playlist", playlist, True, reduce_by), ("account", account, False, received)],
+        when,
+        f"Venda / retorno de {playlist.name}",
+        data.get("notes"),
+    )
 
     entries = [{"playlist_id": pid, "value": v} for pid, v in positions.items()]
     entries += [{"account_id": aid, "value": v} for aid, v in accounts.items()]
@@ -389,6 +442,7 @@ def invest():
         raw_amount=data.get("amount"),
         when=data.get("date"),
         notes=data.get("notes"),
+        description=f"Aporte em {playlist.name}",
     )
 
 

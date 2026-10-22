@@ -76,7 +76,10 @@ export function PlaylistDetail() {
     ask({
       title: "Excluir lançamento?",
       message: `"${tx.description}" sai do caixa.`,
-      consequences: [`O saldo da conta ${tx.type === "income" ? "diminui" : "aumenta"} e o valor desta posição muda.`],
+      consequences: [
+        `O saldo da conta ${tx.type === "income" ? "diminui" : "aumenta"} e o valor desta posição muda.`,
+        ...(tx.transfer ? ["Faz parte de um Aportei/Vendi/Transferir da planilha: a outra ponta sai junto."] : []),
+      ],
       action: () => remove.mutateAsync(tx.id),
       done: "Lançamento excluído",
     })

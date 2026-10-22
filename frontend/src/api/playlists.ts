@@ -9,6 +9,8 @@ export type PlaylistInput = {
   kind: PlaylistKind
   counts_in_net_worth: boolean
   opening_value?: number
+  /** Só ativo, editando: quanto vale agora, com aportes e retornos (o backend acha o opening_value). */
+  value?: number
   currency?: Currency
   auto_source?: "loans" | "market" | null
   asset_type?: AssetType

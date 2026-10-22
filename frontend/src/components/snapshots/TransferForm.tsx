@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react"
 import { Button } from "../ui/Button"
 import { Input, Label, Select } from "../ui/Input"
 import { formatCurrency, todayISO } from "../../lib/format"
+import { currentValue } from "../../lib/asset"
 import type { Account, Playlist, TransferRef } from "../../types"
 import type { TransferInput } from "../../api/snapshots"
 
@@ -33,7 +34,7 @@ export function TransferForm({
       .map((p) => ({
         key: `playlist:${p.id}`,
         label: `${p.icon} ${p.name}`,
-        value: p.opening_value ?? 0,
+        value: currentValue(p),
       })),
     ...accounts.map((a) => ({
       key: `account:${a.id}`,

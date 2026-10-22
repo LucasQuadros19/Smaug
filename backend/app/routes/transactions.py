@@ -1,7 +1,7 @@
 from datetime import date
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
 from app.extensions import db
@@ -51,6 +51,15 @@ def _generated_by(transaction_id):
             f"empréstimo em Empréstimos (\"O dinheiro saiu de qual conta\"). {_KEEP}"
         )
     return None
+
+
+def _transfer_lock(transaction):
+    if transaction.transfer_group is None:
+        return None
+    return (
+        "Esse lançamento é parte de um Aportei/Vendi/Transferir da planilha: mudar o valor só aqui "
+        f"desencontraria as duas pontas. Para corrigir, apague (as duas pontas saem juntas) e lance de novo. {_KEEP}"
+    )
 
 
 def _mark_origins(items):
@@ -118,9 +127,9 @@ def _apply_filters(query):
     # patrimônio (marcada com playlist/ativo), que não é ganho nem perda.
     scope = request.args.get("scope")
     if scope == "cash":
-        query = query.filter(Transaction.playlist_id.is_(None))
+        query = query.filter(Transaction.playlist_id.is_(None), Transaction.transfer_group.is_(None))
     elif scope == "transfers":
-        query = query.filter(Transaction.playlist_id.isnot(None))
+        query = query.filter(or_(Transaction.playlist_id.isnot(None), Transaction.transfer_group.isnot(None)))
 
     return query
 
@@ -243,7 +252,7 @@ def update_transaction(transaction_id):
         transaction.notes = data["notes"]
 
     if [getattr(transaction, field) for field in _MONEY_FIELDS] != before:
-        origin = _generated_by(transaction_id)
+        origin = _generated_by(transaction_id) or _transfer_lock(transaction)
         if origin:
             db.session.rollback()
             return jsonify({"error": origin}), 400
@@ -262,6 +271,10 @@ def delete_transaction(transaction_id):
     if origin:
         return jsonify({"error": origin}), 400
 
-    db.session.delete(transaction)
+    # Uma ponta sozinha deixaria o dinheiro sumir de um lado e aparecer no outro.
+    if transaction.transfer_group is not None:
+        Transaction.query.filter_by(transfer_group=transaction.transfer_group).delete()
+    else:
+        db.session.delete(transaction)
     db.session.commit()
     return "", 204

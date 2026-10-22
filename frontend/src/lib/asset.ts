@@ -37,6 +37,18 @@ export function sumLiabilities(playlists: Playlist[]): number {
   }, 0)
 }
 
+/** Quanto a posição vale agora em reais: o mesmo número do patrimônio. Lucro
+ *  já realizado (voltou mais do que foi) não fica parado aqui, então vale zero. */
+export function currentValue(playlist: Playlist): number {
+  const { outstanding, isLiability } = getAssetOutstanding(playlist)
+  return isLiability ? outstanding : Math.max(outstanding, 0)
+}
+
+/** O mesmo, na moeda da posição (US$, BTC). */
+export function currentNativeValue(playlist: Playlist): number {
+  return playlist.rate ? currentValue(playlist) / playlist.rate : playlist.native_value
+}
+
 /** Total aportado: o que já era seu mais o que saiu do caixa para cá. */
 export function getTotalInvested(playlist: Playlist): number {
   // Ligada a outra tela: o valor já é o de lá; aportado é só o que saiu das contas para ela.

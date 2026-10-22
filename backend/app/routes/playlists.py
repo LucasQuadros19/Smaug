@@ -207,6 +207,17 @@ def update_playlist(playlist_id):
         if source not in (None, *AUTO_SOURCES):
             return jsonify({"error": f"auto_source deve ser um de {AUTO_SOURCES} ou vazio"}), 400
         playlist.auto_source = source
+    # Ativo: "quanto vale agora", o mesmo número das outras telas. Vira o valor
+    # digitado que, somado aos lançamentos, dá esse total.
+    if "value" in data and playlist.kind == "asset" and not playlist.auto_source:
+        from datetime import date
+
+        from app.routes.snapshots import NATIVE_PLACES, current_values, set_value
+
+        target = (money(data["value"], "value", allow_negative=True, required=False) or Decimal(0)).quantize(NATIVE_PLACES)
+        current = current_values([playlist])[playlist.id]
+        if target != current:
+            set_value(playlist, target, current, get_playlist_totals(), date.today())
 
     db.session.commit()
     return jsonify(_with_values(playlist))

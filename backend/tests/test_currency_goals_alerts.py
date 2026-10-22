@@ -55,7 +55,7 @@ def test_aporte_em_reais_vira_dolar_na_posicao(client, dolar_a_5, make_account):
     )
     assert response.status_code == 201, response.get_data(as_text=True)
     atual = client.get(f"/api/playlists/{cripto['id']}").get_json()
-    assert atual["native_value"] == 200  # 100 + R$500/5
+    assert atual["outstanding"] == 1000  # US$ 100 + US$ 100 (R$500/5), a R$ 5
 
 
 def test_sem_cotacao_nao_inventa_valor(client, monkeypatch, tmp_path, app):

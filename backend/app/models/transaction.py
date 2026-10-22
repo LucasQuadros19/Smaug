@@ -22,6 +22,9 @@ class Transaction(Owned, db.Model):
     type = db.Column(db.String(20), nullable=False)
     date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.String(500), nullable=True)
+    # Os lançamentos de um Aportei/Vendi/Transferir da planilha: dinheiro mudando
+    # de lugar, não receita nem despesa. Apagar um apaga o grupo inteiro.
+    transfer_group = db.Column(db.Uuid, nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
@@ -35,6 +38,7 @@ class Transaction(Owned, db.Model):
             "type": self.type,
             "date": self.date.isoformat() if self.date else None,
             "notes": self.notes,
+            "transfer": self.transfer_group is not None,
             "category": self.category.to_dict() if self.category else None,
             "account_name": self.account.name if self.account else None,
             "playlist": self.playlist.to_dict() if self.playlist else None,

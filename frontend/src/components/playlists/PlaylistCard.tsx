@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { Card } from "../ui/Card"
 import { Badge } from "../ui/Badge"
 import { formatCurrency, formatMoney, formatRate } from "../../lib/format"
-import { getAssetOutstanding, getTotalInvested, isDeclaredValue } from "../../lib/asset"
+import { currentNativeValue, getAssetOutstanding, getTotalInvested, isDeclaredValue } from "../../lib/asset"
 import { ASSET_TYPES } from "../../lib/constants"
 import type { Playlist } from "../../types"
 
@@ -87,7 +87,7 @@ export function PlaylistCard({
                 : "text-slate-900 dark:text-white"
           }`}
         >
-          {foreign ? formatMoney(playlist.native_value, playlist.currency) : formatCurrency(isProfit ? profit : outstanding)}
+          {foreign ? formatMoney(currentNativeValue(playlist), playlist.currency) : formatCurrency(isProfit ? profit : outstanding)}
         </p>
         {foreign && (
           <p className="text-sm text-slate-500 dark:text-slate-400">

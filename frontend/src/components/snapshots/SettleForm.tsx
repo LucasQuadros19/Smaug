@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Button } from "../ui/Button"
 import { Input, Label, Select } from "../ui/Input"
 import { formatCurrency, todayISO } from "../../lib/format"
+import { currentValue } from "../../lib/asset"
 import type { Account, Playlist } from "../../types"
 import type { SettleInput } from "../../api/snapshots"
 
@@ -19,7 +20,7 @@ export function SettleForm({
   submitting: boolean
 }) {
   // Posições derivadas (empréstimo) se quitam na tela de origem.
-  const sellable = positions.filter((p) => !p.auto_source && (p.opening_value ?? 0) > 0)
+  const sellable = positions.filter((p) => !p.auto_source && currentValue(p) > 0)
 
   const [playlistId, setPlaylistId] = useState(sellable[0]?.id ?? 0)
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? 0)
@@ -29,7 +30,7 @@ export function SettleForm({
   const [notes, setNotes] = useState("")
 
   const position = sellable.find((p) => p.id === playlistId)
-  const bookValue = position?.opening_value ?? 0
+  const bookValue = position ? currentValue(position) : 0
   const reduceBy = partial === "" ? bookValue : Number(partial) || 0
   const gain = (Number(received) || 0) - reduceBy
 
@@ -73,7 +74,7 @@ export function SettleForm({
         <Select value={playlistId} onChange={(e) => setPlaylistId(Number(e.target.value))}>
           {sellable.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.icon} {p.name} — {formatCurrency(p.opening_value ?? 0)}
+              {p.icon} {p.name} — {formatCurrency(currentValue(p))}
             </option>
           ))}
         </Select>

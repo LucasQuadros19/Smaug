@@ -6,7 +6,7 @@ import type { Transaction } from "../types"
  * cor neutra em vez do verde/vermelho de receita/despesa.
  */
 export function getAmountColorClass(tx: Transaction): string {
-  if (tx.playlist) {
+  if (tx.playlist || tx.transfer) {
     return "text-indigo-600 dark:text-indigo-400"
   }
   return tx.type === "income"

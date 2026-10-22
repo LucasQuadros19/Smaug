@@ -8,6 +8,7 @@ import { Toggle } from "../ui/Toggle"
 import { SegmentedControl } from "../ui/SegmentedControl"
 import { useAccounts } from "../../hooks/useAccounts"
 import { formatCurrency, formatRate, todayISO } from "../../lib/format"
+import { currentNativeValue } from "../../lib/asset"
 import { useRates } from "../../hooks/useDashboard"
 import { ASSET_TYPES, CURRENCIES } from "../../lib/constants"
 import type { AssetType, Currency, Playlist } from "../../types"
@@ -44,8 +45,11 @@ export function AssetForm({
   const [assetType, setAssetType] = useState<AssetType>(initial?.asset_type ?? "investment")
   const [source, setSource] = useState<ValueSource>("declare")
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? "BRL")
-  // Automática mostra o valor que vem da origem; as outras, o valor na moeda delas.
-  const shownValue = initial?.auto_source ? initial.opening_value : initial?.native_value
+  // Automática mostra o valor que vem da origem; as outras, quanto valem agora
+  // (com aportes e retornos) na moeda delas — o mesmo número das outras telas.
+  const shownValue = initial?.auto_source
+    ? initial.opening_value
+    : initial && Number(currentNativeValue(initial).toFixed(initial.currency === "BTC" ? 8 : 2))
   const [amount, setAmount] = useState(shownValue && shownValue > 0 ? String(shownValue) : "")
   const [accountId, setAccountId] = useState(0)
   const [date, setDate] = useState(todayISO())
@@ -70,7 +74,8 @@ export function AssetForm({
           icon,
           kind: "asset",
           counts_in_net_worth: countsInNetWorth,
-          opening_value: declaring ? value : 0,
+          // Editando, o valor é "quanto vale agora": o backend desconta os lançamentos.
+          ...(isCreating ? { opening_value: declaring ? value : 0 } : fromLoans ? {} : { value }),
           currency: fromLoans ? "BRL" : currency,
           auto_source: origin === "manual" ? null : origin,
           asset_type: assetType,
