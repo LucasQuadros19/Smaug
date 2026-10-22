@@ -53,7 +53,7 @@ export function TransactionTable({
               <td className="px-5 py-3 text-slate-500 dark:text-slate-400">
                 {tx.category ? `${tx.category.icon} ${tx.category.name}` : "—"}
               </td>
-              <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{tx.account_name}</td>
+              <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{tx.account_name ?? "—"}</td>
               {showPlaylist && (
                 <td className="px-5 py-3">
                   {tx.playlist ? (

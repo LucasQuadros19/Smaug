@@ -3,7 +3,7 @@ import type { Transaction, TransactionPage, TransactionScope } from "../types"
 
 export type TransactionInput = {
   description: string
-  account_id: number
+  account_id: number | null
   category_id: number | null
   playlist_id?: number | null
   amount: number

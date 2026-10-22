@@ -3,16 +3,18 @@ import { Button } from "../ui/Button"
 import { Input, Label } from "../ui/Input"
 import { useAccountsAt } from "../../hooks/useAccounts"
 import { formatCurrency, formatRate, todayISO } from "../../lib/format"
-import type { Account, Playlist } from "../../types"
+import type { Account, CurrentSnapshot, Playlist } from "../../types"
 import type { SnapshotInput } from "../../api/snapshots"
 
 export function SnapshotForm({
+  current,
   positions,
   accounts,
   onSubmit,
   onCancel,
   submitting,
 }: {
+  current?: CurrentSnapshot
   positions: Playlist[]
   accounts: Account[]
   onSubmit: (data: SnapshotInput) => void
@@ -24,10 +26,14 @@ export function SnapshotForm({
   const [notes, setNotes] = useState("")
   const [values, setValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
-    // Na moeda de cada posição (US$ para quem acompanha em dólar). Posição
-    // automática mostra o valor que vem da origem (Empréstimos).
-    for (const p of positions)
-      initial[`p${p.id}`] = String(p.auto_source ? p.opening_value : p.native_value)
+    // O valor de agora, o mesmo das outras telas (com aportes e retornos), na
+    // moeda de cada posição (US$ para quem acompanha em dólar).
+    for (const p of positions) {
+      const id = String(p.id)
+      initial[`p${p.id}`] = String(
+        current?.native[id] ?? current?.positions[id] ?? (p.auto_source ? p.opening_value : p.native_value)
+      )
+    }
     return initial
   })
 
@@ -76,7 +82,8 @@ export function SnapshotForm({
     >
       <p className="text-xs text-slate-400">
         As posições vêm com o valor atual e as contas com o saldo do dia escolhido. Ajuste o que
-        mudou e salve — vira uma linha nova no histórico e atualiza o patrimônio.
+        mudou e salve: vira uma linha nova no histórico e o valor muda também nos Ativos e no
+        Dashboard. Zerar um ativo lança nele uma saída de 100% "Editado à força".
       </p>
       {balancesAt.isError && (
         <p className="text-xs text-rose-500">Não deu para carregar os saldos desse dia. Tente de novo.</p>

@@ -147,7 +147,8 @@ export interface ShoppingItem {
 
 export interface Transaction {
   id: number
-  account_id: number
+  /** null só na saída forçada da planilha: o ativo zerou sem dinheiro entrar em conta. */
+  account_id: number | null
   category_id: number | null
   playlist_id: number | null
   description: string
@@ -156,7 +157,7 @@ export interface Transaction {
   date: string
   notes: string | null
   category: Category | null
-  account_name: string
+  account_name: string | null
   playlist: Playlist | null
   /** Criado por outra tela (empréstimo, Mercado): o valor só muda por lá. Só vem na lista de Transações. */
   origin?: { kind: "loan" | "market"; label: string; link: string } | null
@@ -250,6 +251,9 @@ export interface Snapshot {
   net_worth: number
   created_at: string
 }
+
+/** A linha "Agora" da planilha: o que um registro salvo neste momento guardaria. */
+export type CurrentSnapshot = Omit<Snapshot, "id" | "created_at">
 
 export interface SnapshotEntryInput {
   playlist_id?: number

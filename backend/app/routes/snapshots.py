@@ -8,8 +8,9 @@ from app.extensions import db
 from app.models.account import Account
 from app.models.playlist import Playlist
 from app.models.snapshot import Snapshot, SnapshotEntry
+from app.models.transaction import Transaction
 from app.services.auto_value_service import auto_value_map
-from app.services.balance_service import get_balances_by_account
+from app.services.balance_service import get_balances_by_account, get_playlist_totals
 from app.utils.pagination import paginate
 from app.utils.parse import find, iso_date, money, text
 
@@ -18,11 +19,68 @@ snapshots_bp = Blueprint("snapshots", __name__)
 # Valor na moeda da posição: 8 casas para caber fração de bitcoin.
 NATIVE_PLACES = Decimal("0.00000001")
 
+FORCED_EDIT = "Editado à força (planilha)"
 
 
-def _create_snapshot(payload):
-    """Cria o registro e sincroniza o estado atual com ele.
+def _moved(playlist, totals):
+    """O que os lançamentos já somaram ao valor da posição, na moeda dela.
+    Valor declarado (moto, imóvel) não muda com lançamento."""
+    rate = playlist.rate
+    if playlist.value_mode == "declarado" or not rate:
+        return Decimal(0)
+    entry = totals.get(playlist.id, {})
+    moved = entry.get("out", Decimal(0)) - entry.get("in", Decimal(0))
+    return (moved / rate).quantize(NATIVE_PLACES)
 
+
+def current_values(playlists):
+    """Quanto cada posição vale agora, na moeda dela: o mesmo número das telas
+    de Ativos e do Dashboard, e não só o valor digitado."""
+    totals = get_playlist_totals()
+    auto = auto_value_map(playlists)
+    values = {}
+    for playlist in playlists:
+        if playlist.id in auto:
+            values[playlist.id] = auto[playlist.id]
+            continue
+        opening = Decimal(playlist.opening_value or 0)
+        value = opening + _moved(playlist, totals)
+        # Voltou mais do que foi: o lucro já está no caixa, não parado aqui.
+        # Valor declarado negativo é dívida e continua negativo.
+        values[playlist.id] = value if opening < 0 else max(value, Decimal(0))
+    return values
+
+
+def _set_value(playlist, target, current, totals, when, forced):
+    """Faz a posição valer `target` (na moeda dela) em todo o sistema.
+
+    O valor de um ativo de capital é o digitado + os lançamentos, então o
+    digitado vira o que falta para chegar em `target`. Zerar à mão vira uma
+    saída de 100%, sem conta (nenhum dinheiro entrou em lugar nenhum), para o
+    ativo mostrar para onde o valor foi.
+    """
+    if forced and target == 0 and playlist.value_mode == "capital":
+        amount = (abs(current) * playlist.rate).quantize(Decimal("0.01"))
+        if amount:
+            db.session.add(
+                Transaction(
+                    account_id=None,
+                    playlist_id=playlist.id,
+                    description=FORCED_EDIT,
+                    amount=amount,
+                    type="income" if current > 0 else "expense",
+                    date=when,
+                )
+            )
+            db.session.flush()
+            totals = get_playlist_totals()
+    playlist.opening_value = target - _moved(playlist, totals)
+
+
+def _create_snapshot(payload, forced=False):
+    """Cria o registro e faz o resto do sistema concordar com ele.
+
+    `forced`: valores digitados à mão no "Novo registro" (ver `_set_value`).
     Retorna (dict, None) em caso de sucesso ou (None, (mensagem, status)).
     """
     when = payload.get("date")
@@ -42,6 +100,8 @@ def _create_snapshot(payload):
 
     # Até a data do registro: o que entrou e saiu depois continua valendo no saldo de hoje.
     moved = get_balances_by_account(until=when)
+    current = current_values(Playlist.query.all())
+    totals = get_playlist_totals()
 
     for raw in entries:
         if not isinstance(raw, dict):
@@ -68,8 +128,9 @@ def _create_snapshot(payload):
                 value = (value * rate).quantize(Decimal("0.01"))
             # Posição derivada tem a origem como fonte da verdade: o registro
             # guarda o valor do dia, mas não sobrescreve de onde ele vem.
-            if not playlist.auto_source:
-                playlist.opening_value = native_value if native_value is not None else value
+            target = native_value if native_value is not None else value
+            if not playlist.auto_source and target != current[playlist.id]:
+                _set_value(playlist, target, current[playlist.id], totals, when, forced)
         elif account_id:
             account = find(Account, account_id)
             if not account:
@@ -113,9 +174,29 @@ def list_snapshots():
     return jsonify(paginate(query, lambda s: s.to_dict(counting)))
 
 
+@snapshots_bp.get("/current")
+def current_snapshot():
+    """A linha "Agora" da planilha: o que um registro salvo neste momento guardaria."""
+    playlists = Playlist.query.filter_by(kind="asset").all()
+    values = current_values(playlists)
+    balances = get_balances_by_account()
+    entries = []
+    for playlist in playlists:
+        value, native = values[playlist.id], None
+        if playlist.currency != "BRL" and not playlist.auto_source:
+            native, value = value, (value * (playlist.rate or 0)).quantize(Decimal("0.01"))
+        entries.append(SnapshotEntry(playlist_id=playlist.id, value=value, native_value=native))
+    entries += [
+        SnapshotEntry(account_id=a.id, value=a.initial_balance + balances.get(a.id, 0))
+        for a in Account.query.all()
+    ]
+    # Fora da sessão: só monta a linha, não grava nada.
+    return jsonify(Snapshot(date=date_cls.today(), inflow=0, entries=entries).to_dict(counting_ids()))
+
+
 @snapshots_bp.post("")
 def create_snapshot():
-    result, error = _create_snapshot(request.get_json(silent=True) or {})
+    result, error = _create_snapshot(request.get_json(silent=True) or {}, forced=True)
     if error:
         return jsonify({"error": error[0]}), error[1]
     return jsonify(result), 201
@@ -137,10 +218,8 @@ def transfer_between(origin, target, raw_amount, when=None, notes=None):
 
     balances = get_balances_by_account(until=when)
     playlists = {p.id: p for p in Playlist.query.all()}
-    # Na moeda de cada posição; `amount` é sempre em reais. Posição ligada a outra
-    # tela entra pelo valor de lá (o digitado nela não vale).
-    auto = auto_value_map(list(playlists.values()))
-    positions = {pid: auto.get(pid, Decimal(p.opening_value or 0)) for pid, p in playlists.items()}
+    # Na moeda de cada posição; `amount` é sempre em reais.
+    positions = current_values(list(playlists.values()))
     accounts = {
         a.id: Decimal(a.initial_balance or 0) + Decimal(balances.get(a.id, 0))
         for a in Account.query.all()
@@ -239,8 +318,10 @@ def settle():
 
     received = money(data.get("received"), "received")
     when = iso_date(data.get("date"), "date", required=False) or date_cls.today()
+    all_positions = Playlist.query.all()
+    positions = current_values(all_positions)
     # Tudo em reais aqui; a posição guarda na moeda dela.
-    current = (Decimal(playlist.opening_value or 0) * rate).quantize(Decimal("0.01"))
+    current = (positions[playlist.id] * rate).quantize(Decimal("0.01"))
     raw_reduce = data.get("reduce_by")
     # Sem 'reduce_by' é baixa total da posição.
     reduce_by = current if raw_reduce is None else money(raw_reduce, "reduce_by")
@@ -254,9 +335,6 @@ def settle():
         ), 400
 
     balances = get_balances_by_account(until=when)
-    all_positions = Playlist.query.all()
-    auto = auto_value_map(all_positions)
-    positions = {p.id: auto.get(p.id, Decimal(p.opening_value or 0)) for p in all_positions}
     accounts = {
         a.id: Decimal(a.initial_balance or 0) + Decimal(balances.get(a.id, 0))
         for a in Account.query.all()

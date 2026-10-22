@@ -20,7 +20,7 @@ import {
 import type { ShareSection } from "../types"
 
 export const SHARE_SECTIONS: { key: ShareSection; label: string; hint: string }[] = [
-  { key: "contas", label: "Contas e lançamentos", hint: "Contas, transações, recorrentes, orçamentos, lista de compras e categorias" },
+  { key: "contas", label: "Contas e lançamentos", hint: "Contas, caixa, recorrentes, orçamentos, lista de compras e categorias" },
   { key: "patrimonio", label: "Patrimônio e metas", hint: "Evolução, ativos, grupos e metas" },
   { key: "emprestimos", label: "Empréstimos", hint: "Inclusive registrar recebimentos nas contas de quem compartilhou" },
   { key: "mercado", label: "Mercado", hint: "Códigos acompanhados e compras" },
@@ -46,7 +46,7 @@ export const navSections: {
     title: "Dia a dia",
     links: [
       { to: "/calendario", label: "Calendário", icon: CalendarDays, section: "alguma" },
-      { to: "/transacoes", label: "Transações", icon: ArrowLeftRight, section: "contas" },
+      { to: "/transacoes", label: "Caixa", icon: ArrowLeftRight, section: "contas" },
       { to: "/recorrentes", label: "Recorrentes", icon: Repeat, section: "contas" },
       { to: "/orcamentos", label: "Orçamentos", icon: PiggyBank, section: "contas" },
       { to: "/lista-compras", label: "Lista de compras", icon: ShoppingCart, section: "contas" },

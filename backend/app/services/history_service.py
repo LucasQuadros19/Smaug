@@ -119,7 +119,7 @@ def _cash_until(cutoff: date, initial_total: Decimal):
                 )
             )
         )
-        .filter(Transaction.date <= cutoff)
+        .filter(Transaction.date <= cutoff, Transaction.account_id.isnot(None))
         .scalar()
     )
     return initial_total + Decimal(net or 0)

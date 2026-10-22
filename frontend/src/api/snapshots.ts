@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { Paginated, Snapshot, SnapshotEntryInput, TransferRef } from "../types"
+import type { CurrentSnapshot, Paginated, Snapshot, SnapshotEntryInput, TransferRef } from "../types"
 
 export type TransferInput = {
   from: TransferRef
@@ -38,6 +38,7 @@ export const snapshotsApi = {
     api.post<Snapshot>("/snapshots/invest", data),
   settle: (data: SettleInput) =>
     api.post<Snapshot & { realized_gain: number }>("/snapshots/settle", data),
+  current: () => api.get<CurrentSnapshot>("/snapshots/current"),
   list: (params: { page?: number; per_page?: number } = {}) =>
     api.get<Paginated<Snapshot>>("/snapshots", { params }),
   create: (data: SnapshotInput) => api.post<Snapshot>("/snapshots", data),

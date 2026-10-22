@@ -222,7 +222,8 @@ def update_transaction(transaction_id):
         if not description:
             return jsonify({"error": "O campo 'description' não pode ser vazio"}), 400
         transaction.description = description
-    if "account_id" in data:
+    # A saída forçada da planilha não tem conta: editar a descrição não obriga a escolher uma.
+    if "account_id" in data and data["account_id"] != transaction.account_id:
         if not find(Account, data["account_id"]):
             return jsonify({"error": "account_id inválido"}), 400
         transaction.account_id = data["account_id"]

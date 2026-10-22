@@ -71,7 +71,7 @@ export function Transactions() {
   return (
     <>
       <Topbar
-        title="Transações"
+        title="Caixa"
         action={
           <Button onClick={openCreate}>
             <Plus size={16} /> Nova transação
@@ -108,7 +108,7 @@ export function Transactions() {
                 total={result.total}
                 perPage={result.per_page}
                 onChange={setPage}
-                label="transações"
+                label="lançamentos"
               />
             )}
           </>

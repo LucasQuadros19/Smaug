@@ -9,7 +9,8 @@ class Transaction(Owned, db.Model):
     __tablename__ = "transactions"
 
     id = db.Column(db.Integer, primary_key=True)
-    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False)
+    # Vazio só na saída forçada da planilha: o ativo zera sem dinheiro entrar em conta nenhuma.
+    account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     playlist_id = db.Column(db.Integer, db.ForeignKey("playlists.id"), nullable=True)
     # A recorrência que lançou este lançamento: o calendário mostra a ocorrência como paga.

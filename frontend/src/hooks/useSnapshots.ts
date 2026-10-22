@@ -10,6 +10,16 @@ export function useSnapshots(params: { page?: number; per_page?: number } = {}) 
   })
 }
 
+/** Valores de agora, vindos das outras telas. Lançamentos e edições de ativo
+ *  não invalidam "snapshots", então busca de novo sempre que a tela abre. */
+export function useCurrentSnapshot() {
+  return useQuery({
+    queryKey: ["snapshots", "current"],
+    queryFn: snapshotsApi.current,
+    staleTime: 0,
+  })
+}
+
 export function useSnapshotMutations() {
   const queryClient = useQueryClient()
   const invalidate = () => {

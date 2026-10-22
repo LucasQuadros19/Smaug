@@ -9,7 +9,7 @@ export function RecentTransactions({ transactions }: { transactions: Transaction
     <Card>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          Últimas transações
+          Últimos no caixa
         </h3>
         <Link
           to="/transacoes"
@@ -20,7 +20,7 @@ export function RecentTransactions({ transactions }: { transactions: Transaction
       </div>
       {transactions.length === 0 ? (
         <div className="flex h-32 items-center justify-center text-sm text-slate-400 dark:text-slate-500">
-          Nenhuma transação registrada ainda
+          Nenhum lançamento no caixa ainda
         </div>
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-white/5">
@@ -40,7 +40,7 @@ export function RecentTransactions({ transactions }: { transactions: Transaction
                     {tx.description}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {formatDate(tx.date)} · {tx.account_name}
+                    {formatDate(tx.date)} · {tx.account_name ?? "sem conta"}
                     {tx.playlist && (
                       <>
                         {" "}

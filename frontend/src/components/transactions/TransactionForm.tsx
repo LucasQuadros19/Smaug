@@ -70,7 +70,8 @@ export function TransactionForm({
           description,
           amount: Number(amount),
           type,
-          account_id: accountId,
+          // 0 = sem conta: só a saída forçada da planilha, que continua assim.
+          account_id: accountId || null,
           category_id: categoryId,
           playlist_id: playlistId,
           date,

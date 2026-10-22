@@ -10,7 +10,7 @@ import { TransferForm } from "../components/snapshots/TransferForm"
 import { SettleForm } from "../components/snapshots/SettleForm"
 import { InvestForm } from "../components/snapshots/InvestForm"
 import { Pagination } from "../components/ui/Pagination"
-import { useSnapshots, useSnapshotMutations } from "../hooks/useSnapshots"
+import { useCurrentSnapshot, useSnapshots, useSnapshotMutations } from "../hooks/useSnapshots"
 import { usePlaylists } from "../hooks/usePlaylists"
 import { useAccounts } from "../hooks/useAccounts"
 import { useViewing } from "../lib/viewing"
@@ -55,6 +55,7 @@ export function NetWorthTable() {
   const [page, setPage] = useState(1)
   const { data: result, isLoading } = useSnapshots({ page, per_page: 30 })
   const snapshots = result?.items
+  const { data: current } = useCurrentSnapshot()
   const { data: playlists } = usePlaylists()
   const { data: accounts } = useAccounts()
   const viewing = useViewing()
@@ -85,7 +86,8 @@ export function NetWorthTable() {
       done: "Registro excluído",
     })
 
-  const latest = snapshots?.[0]
+  // Os cartões mostram o agora: o último registro pode ser de semanas atrás.
+  const latest = current ?? snapshots?.[0]
 
   return (
     <>
@@ -182,6 +184,37 @@ export function NetWorthTable() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                {current && page === 1 && (
+                  <tr className="bg-indigo-50/60 dark:bg-indigo-500/5">
+                    <td className="sticky left-0 z-10 bg-indigo-50 px-4 py-2.5 font-semibold text-indigo-700 dark:bg-[#171a2b] dark:text-indigo-300">
+                      Agora
+                    </td>
+                    {positions.map((position) => (
+                      <td key={position.id} className="whitespace-nowrap px-4 py-2.5 text-right">
+                        <Money
+                          value={current.positions[String(position.id)] ?? 0}
+                          native={current.native?.[String(position.id)]}
+                          currency={position.currency}
+                        />
+                      </td>
+                    ))}
+                    {cashAccounts.map((account) => (
+                      <td key={account.id} className="whitespace-nowrap px-4 py-2.5 text-right">
+                        <Money value={current.cash[String(account.id)] ?? 0} />
+                      </td>
+                    ))}
+                    <td className="px-4 py-2.5" />
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium">
+                      <Money value={current.invested} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold text-indigo-600 dark:text-indigo-400">
+                      {formatCurrency(current.net_worth)}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-slate-400" colSpan={2}>
+                      valores de hoje nas outras telas
+                    </td>
+                  </tr>
+                )}
                 {snapshots.map((snapshot) => (
                   <tr key={snapshot.id} className="group">
                     <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-medium text-slate-800 group-hover:bg-slate-50 dark:bg-[#12141c] dark:text-slate-100 dark:group-hover:bg-white/[0.03]">
@@ -249,6 +282,7 @@ export function NetWorthTable() {
         error={error}
       >
         <SnapshotForm
+          current={current}
           positions={positions}
           accounts={cashAccounts}
           onSubmit={handleSubmit}
