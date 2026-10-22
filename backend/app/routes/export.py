@@ -2,10 +2,13 @@
 
 import csv
 import io
+import os
 import re
+import zipfile
 from datetime import date
 
-from flask import Blueprint, Response
+import click
+from flask import Blueprint, Response, current_app, g
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.account import Account
@@ -13,6 +16,7 @@ from app.models.loan import Loan
 from app.models.playlist import Playlist
 from app.models.snapshot import Snapshot
 from app.models.transaction import Transaction
+from app.models.user import User
 
 export_bp = Blueprint("export", __name__)
 
@@ -167,3 +171,24 @@ def export_loans():
                 ]
             )
     return _csv_response(rows, "smaug-emprestimos")
+
+
+@export_bp.cli.command("planilhas")
+@click.argument("destino")
+def save_sheets(destino):
+    """Grava num .zip os mesmos CSVs da tela, uma pasta por usuário (para o backup)."""
+    views = {
+        "patrimonio.csv": export_snapshots,
+        "transacoes.csv": export_transactions,
+        "emprestimos.csv": export_loans,
+    }
+    tmp = destino + ".tmp"
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+        for user in User.query.order_by(User.username).all():
+            folder = re.sub(r"[^\w.-]", "_", user.username)
+            with current_app.test_request_context():
+                g.owner_id = user.id
+                for name, view in views.items():
+                    zf.writestr(f"{folder}/{name}", view().get_data())
+    os.replace(tmp, destino)
+    click.echo(f"planilhas ok: {destino}")

@@ -116,3 +116,25 @@ def test_exporta_emprestimos_com_uma_linha_por_participante(client):
     linhas = client.get("/api/export/emprestimos.csv").get_data(as_text=True).splitlines()
     assert len(linhas) == 3  # cabeçalho + 2 participantes
     assert "Carlos" in linhas[1] and "Eu" in linhas[1]
+
+
+def test_planilhas_do_backup_separa_cada_usuario(entrar, app_limpo, tmp_path):
+    import zipfile
+
+    ana, beto = entrar("ana"), entrar("beto")
+    conta = ana.post("/api/accounts", json={"name": "Carteira", "type": "cash"}).get_json()
+    ana.post(
+        "/api/transactions",
+        json={"account_id": conta["id"], "description": "Mercado da Ana", "amount": 50,
+              "type": "expense", "date": "2026-10-01"},
+    )
+    beto.post("/api/accounts", json={"name": "Banco", "type": "cash"})
+
+    destino = tmp_path / "planilhas.zip"
+    resultado = app_limpo.test_cli_runner().invoke(args=["export", "planilhas", str(destino)])
+    assert resultado.exit_code == 0, resultado.output
+
+    with zipfile.ZipFile(destino) as zf:
+        assert {"ana/transacoes.csv", "beto/patrimonio.csv", "beto/emprestimos.csv"} <= set(zf.namelist())
+        assert "Mercado da Ana" in zf.read("ana/transacoes.csv").decode()
+        assert "Mercado da Ana" not in zf.read("beto/transacoes.csv").decode()
