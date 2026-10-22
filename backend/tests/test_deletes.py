@@ -67,6 +67,27 @@ def test_posicao_em_uso_apaga_e_solta_o_resto(client, make_account, make_positio
     assert client.get("/api/goals").get_json()[0]["playlist_id"] is None
 
 
+
+def test_ativo_na_evolucao_so_apaga_depois_de_sair_do_patrimonio(client, make_account, make_position):
+    conta = make_account(initial=500)
+    bot = make_position(name="bot", opening=300)
+    client.post(
+        "/api/snapshots",
+        json={"date": "2026-09-01", "entries": [{"playlist_id": bot.id, "value": 300}, {"account_id": conta.id, "value": 500}]},
+    )
+
+    resposta = client.delete(f"/api/playlists/{bot.id}")
+    assert resposta.status_code == 400
+    assert "Contar no patrimônio" in resposta.get_json()["error"]
+
+    client.put(f"/api/playlists/{bot.id}", json={"counts_in_net_worth": False})
+    antes = client.get("/api/snapshots").get_json()["items"][0]["net_worth"]
+    assert client.delete(f"/api/playlists/{bot.id}").status_code == 204
+
+    registro = client.get("/api/snapshots").get_json()["items"][0]
+    assert registro["net_worth"] == antes == 500
+    assert registro["positions"] == {}
+
 def test_posicao_do_mercado_nao_apaga_com_codigos(client, db, make_account, monkeypatch):
     monkeypatch.setattr(market_service, "quotes", lambda symbols: {})
     db.session.add(MarketSymbol(code="X", kind="stock", provider_id="X.SA", name="X", currency="BRL"))

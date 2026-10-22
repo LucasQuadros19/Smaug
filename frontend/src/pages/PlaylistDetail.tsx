@@ -94,7 +94,7 @@ export function PlaylistDetail() {
       message: `"${playlist.name}" será apagado.`,
       consequences: [
         "Os lançamentos continuam no caixa; só deixam de estar marcados aqui.",
-        "Se estiver na Evolução, o sistema não deixa: desligue \"Contar no patrimônio\" ou zere o valor.",
+        "Os valores dele saem da Evolução. Se ainda contar no patrimônio, desligue \"Contar no patrimônio\" antes de excluir.",
       ],
       action: async () => {
         await removePlaylist.mutateAsync(playlist.id)

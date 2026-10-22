@@ -224,13 +224,17 @@ def delete_playlist(playlist_id):
             return jsonify(
                 {"error": "Essa é a posição do Mercado: enquanto houver códigos lá, ela leva o valor deles ao patrimônio."}
             ), 400
-    if SnapshotEntry.query.filter_by(playlist_id=playlist_id).first():
+    # Os totais da Evolução só somam quem conta no patrimônio: fora disso, ou com
+    # valor zero nos registros, apagar não muda o histórico.
+    entries = SnapshotEntry.query.filter_by(playlist_id=playlist_id)
+    if playlist.counts_in_net_worth and entries.filter(SnapshotEntry.value != 0).first():
         return jsonify(
             {
                 "error": "Esse item está nos registros de patrimônio — apagar mudaria o histórico. "
-                "Para tirá-lo do total, desligue 'Contar no patrimônio' ou zere o valor."
+                "Desligue 'Contar no patrimônio' e tente de novo."
             }
         ), 400
+    entries.delete()
     Transaction.query.filter_by(playlist_id=playlist_id).update({"playlist_id": None})
     RecurringTransaction.query.filter_by(playlist_id=playlist_id).update({"playlist_id": None})
     db.session.delete(playlist)
