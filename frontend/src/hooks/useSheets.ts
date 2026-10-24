@@ -92,6 +92,13 @@ export function useCalcRefs(): CalcRef[] {
         add(person, p.contributed, `${p.name} colocou`)
         add(`${person}.recebe`, p.to_receive, `${p.name} recebe`)
         add(`${person}.ganha`, p.gain, `${p.name} ganha por mês`)
+        // A fatia de cada um no número do empréstimo: as fatias somam o total (comissão inclusa).
+        const name = person.slice(base.length + 1)
+        const monthly = p.gain + p.commission
+        add(`${base}.juros.${name}`, monthly, `juros por mês de ${p.name} no empréstimo de ${loan.borrower}`)
+        add(`${base}.lucro.${name}`, monthly * loan.months, `lucro de ${p.name} no empréstimo de ${loan.borrower}`)
+        add(`${base}.recebe.${name}`, p.contributed + monthly * loan.months, `${p.name} recebe do empréstimo de ${loan.borrower}`)
+        if (p.commission > 0) add(`${base}.comissao.${name}`, p.commission, `comissão por mês de ${p.name}`)
       }
     }
     if (market) {

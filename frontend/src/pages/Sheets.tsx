@@ -321,7 +321,7 @@ export function Sheets() {
             <ul className="list-disc space-y-1 pl-5 text-xs">
               <li><code>capital = 10.000</code> cria um valor para usar depois</li>
               <li><code>juros: capital * 10%</code> — antes do ":" é só o nome da linha</li>
-              <li><code>@</code> puxa valores do sistema: <code>@emprestimo.pedro</code>, <code>@emprestimo.pedro.lucas</code>, <code>@dolar</code>, <code>@patrimonio</code></li>
+              <li><code>@</code> puxa valores do sistema: <code>@emprestimo.pedro</code>, <code>@emprestimo.pedro.lucas</code>, <code>@emprestimo.pedro.juros.lucas</code> (a parte de cada um), <code>@dolar</code>, <code>@patrimonio</code></li>
               <li><code>soma</code> soma tudo acima até a soma anterior</li>
             </ul>
           </Card>
