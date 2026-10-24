@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Plus, Trash2, X } from "lucide-react"
+import { Maximize2, Minimize2, Plus, Trash2, X } from "lucide-react"
 import clsx from "clsx"
 import { Topbar } from "../components/layout/Topbar"
 import { Button } from "../components/ui/Button"
@@ -11,6 +11,9 @@ import { useConfirm } from "../components/ui/ConfirmDialog"
 import { toastError } from "../lib/toast"
 
 const OPEN_KEY = "smaug.folhas-abertas"
+const WIDTH_KEY = "smaug.folhas-largura"
+const WIDTH = 380
+const MIN_WIDTH = 280
 const LINE = 24 // px — textarea e coluna de resultados precisam da mesma altura de linha
 
 const bigNumber = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 })
@@ -23,20 +26,20 @@ juros: capital * 10%
 @emprestimo.pedro.lucas
 soma`
 
-function readOpen(): number[] | null {
+function read<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(OPEN_KEY)
-    return raw ? (JSON.parse(raw) as number[]) : null
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : null
   } catch {
     return null
   }
 }
 
-function saveOpen(ids: number[]) {
+function save(key: string, value: unknown) {
   try {
-    localStorage.setItem(OPEN_KEY, JSON.stringify(ids))
+    localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    // sem armazenamento (aba anônima): só não lembra quais estavam abertas
+    // sem armazenamento (aba anônima): só não lembra a arrumação das folhas
   }
 }
 
@@ -63,10 +66,18 @@ function SheetColumn({
   sheet,
   refs,
   onClose,
+  width,
+  onResize,
+  focused,
+  onFocus,
 }: {
   sheet: Sheet
   refs: CalcRef[]
   onClose: () => void
+  width: number
+  onResize: (width: number | null) => void
+  focused: boolean
+  onFocus: () => void
 }) {
   const { update, remove } = useSheetMutations()
   const ask = useConfirm()
@@ -124,8 +135,24 @@ function SheetColumn({
 
   const lines = content.split("\n").length
 
+  // Arrasta a borda direita para alargar; o tamanho fica lembrado por folha.
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const move = (ev: PointerEvent) => onResize(Math.max(MIN_WIDTH, Math.round(width + ev.clientX - startX)))
+    const up = () => {
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }
+
   return (
-    <Card className="flex w-full shrink-0 flex-col gap-3 p-0 sm:w-[380px]">
+    <Card
+      className={clsx("relative flex w-full shrink-0 flex-col gap-3 p-0", !focused && "sm:w-(--largura)")}
+      style={{ "--largura": `${width}px` } as React.CSSProperties}
+    >
       <div className="flex items-center gap-1 border-b border-slate-100 px-4 py-2.5 dark:border-white/5">
         <input
           value={title}
@@ -134,6 +161,14 @@ function SheetColumn({
           className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-800 outline-none dark:text-slate-100"
           aria-label="Título da folha"
         />
+        <button
+          onClick={onFocus}
+          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5"
+          aria-label={focused ? "Voltar às folhas lado a lado" : "Focar nesta folha"}
+          title={focused ? "Voltar às folhas lado a lado" : "Focar nesta folha"}
+        >
+          {focused ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </button>
         <button
           onClick={() =>
             ask({
@@ -225,6 +260,15 @@ function SheetColumn({
           </ul>
         )}
       </div>
+
+      {!focused && (
+        <div
+          onPointerDown={startResize}
+          onDoubleClick={() => onResize(null)}
+          className="absolute inset-y-3 right-0 hidden w-2 cursor-col-resize rounded-full hover:bg-indigo-500/20 sm:block"
+          title="Arraste para alargar · dois cliques volta ao tamanho padrão"
+        />
+      )}
     </Card>
   )
 }
@@ -233,20 +277,29 @@ export function Sheets() {
   const { data: sheets, isLoading } = useSheets()
   const { create } = useSheetMutations()
   const refs = useCalcRefs()
-  const [openIds, setOpenIds] = useState<number[] | null>(readOpen)
+  const [openIds, setOpenIds] = useState<number[] | null>(() => read<number[]>(OPEN_KEY))
+  const [widths, setWidths] = useState<Record<number, number>>(() => read(WIDTH_KEY) ?? {})
+  const [focusId, setFocusId] = useState<number | null>(null)
 
   // Sem preferência salva, todas ficam abertas.
   const open = openIds ?? sheets?.map((s) => s.id) ?? []
   const setOpen = (ids: number[]) => {
     setOpenIds(ids)
-    saveOpen(ids)
+    save(OPEN_KEY, ids)
   }
   const toggle = (id: number) => setOpen(open.includes(id) ? open.filter((i) => i !== id) : [...open, id])
+  const resize = (id: number, width: number | null) => {
+    const { [id]: _, ...rest } = widths
+    const next = width === null ? rest : { ...rest, [id]: width }
+    setWidths(next)
+    save(WIDTH_KEY, next)
+  }
 
   const newSheet = () =>
     create.mutate(`Folha ${(sheets?.length ?? 0) + 1}`, { onSuccess: (sheet) => setOpen([...open, sheet.id]), onError: toastError })
 
-  const visible = (sheets ?? []).filter((s) => open.includes(s.id))
+  const focused = sheets?.find((s) => s.id === focusId)
+  const visible = focused ? [focused] : (sheets ?? []).filter((s) => open.includes(s.id))
 
   return (
     <>
@@ -279,10 +332,10 @@ export function Sheets() {
               {sheets.map((sheet) => (
                 <button
                   key={sheet.id}
-                  onClick={() => toggle(sheet.id)}
+                  onClick={() => (focused ? setFocusId(sheet.id) : toggle(sheet.id))}
                   className={clsx(
                     "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                    open.includes(sheet.id)
+                    (focused ? focused.id === sheet.id : open.includes(sheet.id))
                       ? "border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300"
                       : "border-slate-200 text-slate-500 hover:border-slate-300 dark:border-white/10 dark:text-slate-400"
                   )}
@@ -297,7 +350,19 @@ export function Sheets() {
             ) : (
               <div className="flex flex-col items-start gap-4 sm:flex-row sm:overflow-x-auto sm:pb-2">
                 {visible.map((sheet) => (
-                  <SheetColumn key={sheet.id} sheet={sheet} refs={refs} onClose={() => toggle(sheet.id)} />
+                  <SheetColumn
+                    key={sheet.id}
+                    sheet={sheet}
+                    refs={refs}
+                    onClose={() => {
+                      setFocusId(null)
+                      setOpen(open.filter((i) => i !== sheet.id))
+                    }}
+                    width={widths[sheet.id] ?? WIDTH}
+                    onResize={(w) => resize(sheet.id, w)}
+                    focused={!!focused}
+                    onFocus={() => setFocusId(focused ? null : sheet.id)}
+                  />
                 ))}
               </div>
             )}
