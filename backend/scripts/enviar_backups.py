@@ -2,8 +2,9 @@
 """Manda por e-mail, cifrada, uma cópia do backup mais recente de um sistema.
 
 É a cópia fora do servidor: se a máquina estragar, o backup está no Gmail.
-Roda no servidor, fora do Docker, só com a biblioteca padrão e o `openssl`.
-Lê a configuração do .env do sistema, passado como argumento:
+Só usa a biblioteca padrão e o `openssl`. No Smaug quem chama é o worker
+(`flask backup worker`), com a configuração da tela. Solto, lê o .env do
+sistema, passado como argumento:
 
     python3 enviar_backups.py /home/lucas/fozesc/.env
 
@@ -157,22 +158,23 @@ def limpar_antigos(config, nome, dias):
         return len(apagar)
 
 
-def main():
-    if len(sys.argv) != 2:
-        sys.exit(f"Uso: {sys.argv[0]} /caminho/do/.env")
-    config = ler_env(sys.argv[1])
-    faltando = [k for k in ("BACKUP_NOME", "BACKUP_PASTA", "BACKUP_EMAIL", "BACKUP_SMTP_USER",
-                            "BACKUP_SMTP_PASS", "BACKUP_SENHA") if not config.get(k)]
+OBRIGATORIAS = ("BACKUP_NOME", "BACKUP_EMAIL", "BACKUP_SMTP_USER", "BACKUP_SMTP_PASS", "BACKUP_SENHA")
+
+
+def enviar(config, arquivos, problemas):
+    """Manda `arquivos` num anexo cifrado para BACKUP_EMAIL e tira os antigos da
+    caixa. Devolve o assunto. Configuração faltando ou inválida: ValueError."""
+    faltando = [k for k in OBRIGATORIAS if not config.get(k)]
     if faltando:
-        sys.exit(f"Faltam no .env: {', '.join(faltando)}")
+        raise ValueError(f"Faltam no .env: {', '.join(faltando)}")
     if len(config["BACKUP_SENHA"]) < 12:
-        sys.exit("BACKUP_SENHA curta demais (mínimo 12 caracteres)")
+        raise ValueError("BACKUP_SENHA curta demais (mínimo 12 caracteres)")
     nome = config["BACKUP_NOME"]
     if not re.fullmatch(r"[\w-]+", nome):
-        sys.exit("BACKUP_NOME: use só letras, números e hífen")
+        raise ValueError("BACKUP_NOME: use só letras, números e hífen")
     dias = int(config.get("BACKUP_DIAS") or 30)
+    problemas = list(problemas)
 
-    arquivos, problemas = escolher(config["BACKUP_PASTA"], time.time())
     hoje = datetime.now().strftime("%Y-%m-%d")
     anexo = cifrar(empacotar(arquivos), config["BACKUP_SENHA"]) if arquivos else b""
     if len(anexo) > MAX_ANEXO:
@@ -208,6 +210,20 @@ def main():
         print(f"  {limpar_antigos(config, nome, dias)} e-mail(s) antigo(s) para a lixeira")
     except Exception as erro:  # noqa: BLE001
         print(f"  a limpeza dos antigos falhou: {erro}")
+    return msg["Subject"]
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit(f"Uso: {sys.argv[0]} /caminho/do/.env")
+    config = ler_env(sys.argv[1])
+    if not config.get("BACKUP_PASTA"):
+        sys.exit("Faltam no .env: BACKUP_PASTA")
+    arquivos, problemas = escolher(config["BACKUP_PASTA"], time.time())
+    try:
+        enviar(config, arquivos, problemas)
+    except ValueError as erro:
+        sys.exit(str(erro))
 
 
 if __name__ == "__main__":

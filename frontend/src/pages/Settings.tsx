@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Topbar } from "../components/layout/Topbar"
 import { Card } from "../components/ui/Card"
 import { Toggle } from "../components/ui/Toggle"
+import { BackupSettings } from "../components/settings/BackupSettings"
 import { MarketDefaults } from "../components/settings/MarketDefaults"
 import { SystemSettings } from "../components/settings/SystemSettings"
 import { useHiddenTabs, useMe } from "../hooks/useMe"
@@ -58,6 +59,7 @@ export function Settings() {
               ))}
           </div>
         </Card>
+        <BackupSettings />
       </main>
     </>
   )

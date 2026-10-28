@@ -48,9 +48,11 @@ docker compose pull && docker compose up -d
 
 O container `backup` faz um dump do banco a cada 6 horas em `backups/` e mantém os últimos 14 dias. Só conta o dump que chegou ao fim, e o primeiro de cada mês fica para sempre em `backups/mensal/`.
 
-No servidor, o container `planilhas` grava uma vez por dia `backups/planilhas-*.zip`, com os CSVs de patrimônio, transações e empréstimos de cada usuário, para abrir no Excel. Na mão: `flask export planilhas destino.zip`.
+No servidor, o container `planilhas` roda `flask backup worker`: todo dia às 16h grava `backups/planilhas-*.zip`, com os CSVs de patrimônio, transações e empréstimos de cada usuário, e manda a cópia por e-mail. Na mão: `flask export planilhas destino.zip`.
 
-Cópia fora do servidor: `backend/scripts/enviar_backups.py /caminho/do/.env` manda, cifrado, o backup mais novo do sistema daquele `.env` para o Gmail e tira da caixa os antigos (fica o primeiro de cada mês). Serve para o Smaug e para a Fozesc; as variáveis `BACKUP_*` e o comando para abrir o anexo estão no começo do arquivo.
+Cópia fora do servidor: quem recebe, quem recebe também o banco, a senha do anexo e a frequência de cada arquivo ficam em Configurações, visíveis só para quem criou a primeira conta. Lá também tem o botão "Enviar agora" e o resultado do último envio. A conta Gmail que envia fica no `.env` do servidor (`BACKUP_SMTP_USER` e `BACKUP_SMTP_PASS`); enquanto nada for salvo na tela, valem `BACKUP_EMAIL` e `BACKUP_SENHA` de lá. O comando para abrir o anexo vai no próprio e-mail.
+
+`backend/scripts/enviar_backups.py /caminho/do/.env` ainda manda, solto e sem a tela, o backup mais novo da pasta daquele `.env`; as variáveis estão no começo do arquivo.
 
 Para restaurar um arquivo:
 

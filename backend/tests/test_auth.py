@@ -89,8 +89,9 @@ def test_abas_escondidas(entrar):
 
 def test_todo_model_de_dados_tem_dono():
     # Usuário e compartilhamento são da conta, não dados financeiros: as rotas filtram pelo usuário logado.
+    # O backup é do servidor: só quem criou a primeira conta mexe.
     sem_dono = {m.class_.__name__ for m in db.Model.registry.mappers if not issubclass(m.class_, Owned)}
-    assert sem_dono == {"User", "Share"}
+    assert sem_dono == {"User", "Share", "BackupConfig"}
 
 
 def test_secret_key_fraca_nao_sobe(tmp_path):

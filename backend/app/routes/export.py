@@ -173,9 +173,7 @@ def export_loans():
     return _csv_response(rows, "smaug-emprestimos")
 
 
-@export_bp.cli.command("planilhas")
-@click.argument("destino")
-def save_sheets(destino):
+def gravar_planilhas(destino):
     """Grava num .zip os mesmos CSVs da tela, uma pasta por usuário (para o backup)."""
     views = {
         "patrimonio.csv": export_snapshots,
@@ -191,4 +189,11 @@ def save_sheets(destino):
                 for name, view in views.items():
                     zf.writestr(f"{folder}/{name}", view().get_data())
     os.replace(tmp, destino)
+
+
+@export_bp.cli.command("planilhas")
+@click.argument("destino")
+def save_sheets(destino):
+    """Grava num .zip os mesmos CSVs da tela, uma pasta por usuário (para o backup)."""
+    gravar_planilhas(destino)
     click.echo(f"planilhas ok: {destino}")

@@ -42,7 +42,7 @@ _SECTION_BY_ENDPOINT = {
     "export.export_loans": "emprestimos",
 }
 # Sempre sobre a própria conta, mesmo vendo os dados de outra.
-_OWN_ACCOUNT_BLUEPRINTS = {"auth", "shares"}
+_OWN_ACCOUNT_BLUEPRINTS = {"auth", "shares", "backup"}
 # Cotações: não são dados de ninguém.
 _PUBLIC_ENDPOINTS = {"rates"}
 # Juntam várias partes e mostram só as compartilhadas (ver `routes/calendar.py`).

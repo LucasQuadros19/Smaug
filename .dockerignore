@@ -7,6 +7,7 @@ frontend/*
 !backend/migrations
 !backend/requirements.txt
 !backend/run.py
+!backend/scripts/enviar_backups.py
 !frontend/index.html
 !frontend/package.json
 !frontend/package-lock.json

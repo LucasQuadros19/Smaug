@@ -1,4 +1,5 @@
 from app.models.account import Account
+from app.models.backup_config import BackupConfig
 from app.models.budget import Budget
 from app.models.calendar_event import CalendarEvent
 from app.models.category import Category
@@ -17,6 +18,7 @@ from app.models.user import User
 
 __all__ = [
     "Account",
+    "BackupConfig",
     "Category",
     "Transaction",
     "Budget",
