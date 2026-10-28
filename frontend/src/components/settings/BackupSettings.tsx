@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, CircleAlert, CircleCheck, Info, Loader2, Plus, Send, Trash2 } from "lucide-react"
-import { ApiError } from "../../api/client"
 import { backupApi, type BackupConfig, type Destinatario, type Frequencia } from "../../api/backup"
 import { Button } from "../ui/Button"
 import { Card } from "../ui/Card"
@@ -9,8 +8,8 @@ import { useConfirm } from "../ui/ConfirmDialog"
 import { Input, Label, Select } from "../ui/Input"
 import { Modal } from "../ui/Modal"
 import { toast } from "../../lib/toast"
+import { BACKUP_KEY as KEY, useBackupConfig } from "../../hooks/useBackup"
 
-const KEY = ["backup"]
 const MAX_EMAILS = 20
 const EMAIL = /^[^@\s,;<>"]+@[^@\s,;<>"]+\.[^@\s,;<>".]+$/
 
@@ -28,19 +27,8 @@ const ARQUIVOS = [
 const heading = "text-sm font-semibold text-slate-700 dark:text-slate-200"
 const muted = "text-xs text-slate-400"
 
-/** Backup por e-mail. Só aparece para quem criou a primeira conta (o resto recebe 403). */
 export function BackupSettings() {
-  const query = useQuery({
-    queryKey: KEY,
-    queryFn: () =>
-      backupApi.get().catch((error) => {
-        if (error instanceof ApiError && error.status === 403) return null
-        throw error
-      }),
-    retry: false,
-    // Enquanto o pedido de envio espera o servidor, a tela confere sozinha.
-    refetchInterval: (q) => (q.state.data?.envio_pedido_em ? 10_000 : false),
-  })
+  const query = useBackupConfig()
 
   if (query.isPending) return null
   if (query.error)

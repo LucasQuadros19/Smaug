@@ -8,6 +8,8 @@ export type GoalInput = {
   deadline: string | null
   /** null = acompanha o patrimônio total */
   playlist_id: number | null
+  /** Preenchido = meta separada, com o quanto já foi guardado. */
+  saved_amount: number | null
 }
 
 export const goalsApi = {

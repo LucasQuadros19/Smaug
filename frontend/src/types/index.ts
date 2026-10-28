@@ -41,6 +41,9 @@ export interface Settings {
   hide_values: boolean
   start_page: string
   week_starts_monday: boolean
+  /** O que aparece: metas no Dashboard e gastos por categoria no Caixa. */
+  show_goals: boolean
+  show_category_breakdown: boolean
 }
 
 export type ShareSection = "contas" | "patrimonio" | "emprestimos" | "mercado" | "calculos"
@@ -451,6 +454,8 @@ export interface Goal {
   deadline: string | null
   /** null = acompanha o patrimônio total */
   playlist_id: number | null
+  /** Preenchido = meta separada: não olha patrimônio nem posição. */
+  saved_amount: number | null
   playlist: { id: number; name: string; icon: string; kind: PlaylistKind } | null
   current: number
   remaining: number

@@ -36,7 +36,11 @@ export function GoalProgress({ goal }: { goal: Goal }) {
               ? `${percent}% · guarde ${formatCurrency(goal.monthly_needed)}/mês até ${formatDate(goal.deadline!)}`
               : `${percent}% · faltam ${formatCurrency(goal.remaining)}`}
         {" · "}
-        {goal.playlist ? `${goal.playlist.icon} ${goal.playlist.name}` : "patrimônio total"}
+        {goal.saved_amount !== null
+          ? "separada"
+          : goal.playlist
+            ? `${goal.playlist.icon} ${goal.playlist.name}`
+            : "patrimônio total"}
       </p>
     </div>
   )

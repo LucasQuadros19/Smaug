@@ -69,6 +69,7 @@ def test_padrao_invalido_e_recusado(client, patch):
 def test_padroes_do_sistema(client):
     settings = client.get("/api/auth/me").get_json()["settings"]
     assert (settings["theme"], settings["hide_values"], settings["start_page"], settings["week_starts_monday"]) == ("dark", False, "/", False)
+    assert (settings["show_goals"], settings["show_category_breakdown"]) == (False, False)
     patch = {"theme": "system", "hide_values": True, "start_page": "/emprestimos", "week_starts_monday": True}
     assert client.put("/api/auth/me", json={"settings": patch}).get_json()["settings"] | patch == client.get("/api/auth/me").get_json()["settings"]
 

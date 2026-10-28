@@ -28,6 +28,8 @@ DEFAULTS = {
     "hide_values": False,  # mostra R$ ••• no lugar dos valores
     "start_page": "/",  # aba que abre ao entrar
     "week_starts_monday": False,  # calendário de segunda a domingo
+    "show_goals": False,  # metas no Dashboard
+    "show_category_breakdown": False,  # gastos por categoria no Caixa
 }
 
 _CHOICES = {

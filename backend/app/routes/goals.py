@@ -34,6 +34,10 @@ def _apply(goal, data):
         if data["playlist_id"] and not find(Playlist, data["playlist_id"]):
             return "playlist_id inválido"
         goal.playlist_id = data["playlist_id"] or None
+    if "saved_amount" in data:
+        goal.saved_amount = money(data["saved_amount"], "saved_amount", allow_zero=True, required=False)
+    if goal.saved_amount is not None:
+        goal.playlist_id = None
     return None
 
 

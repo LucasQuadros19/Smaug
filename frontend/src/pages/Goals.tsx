@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { PiggyBank, Pencil, Plus, Trash2 } from "lucide-react"
 import { Topbar } from "../components/layout/Topbar"
 import { Button } from "../components/ui/Button"
 import { Card } from "../components/ui/Card"
@@ -13,6 +13,7 @@ import { useFormSubmit } from "../hooks/useFormSubmit"
 import type { Goal } from "../types"
 import type { GoalInput } from "../api/goals"
 import { useConfirm } from "../components/ui/ConfirmDialog"
+import { formatCurrency } from "../lib/format"
 
 function GoalForm({
   initial,
@@ -30,7 +31,9 @@ function GoalForm({
   const [icon, setIcon] = useState(initial?.icon ?? "🎯")
   const [target, setTarget] = useState(initial ? String(initial.target_amount) : "")
   const [deadline, setDeadline] = useState(initial?.deadline ?? "")
-  const [playlistId, setPlaylistId] = useState(initial?.playlist_id ?? 0)
+  // -1 = separada; 0 = patrimônio total; outro = a posição.
+  const [playlistId, setPlaylistId] = useState(initial?.saved_amount != null ? -1 : (initial?.playlist_id ?? 0))
+  const [saved, setSaved] = useState(initial?.saved_amount != null ? String(initial.saved_amount) : "0")
 
   return (
     <form
@@ -41,7 +44,8 @@ function GoalForm({
           icon,
           target_amount: Number(target),
           deadline: deadline || null,
-          playlist_id: playlistId || null,
+          playlist_id: playlistId > 0 ? playlistId : null,
+          saved_amount: playlistId === -1 ? Number(saved) : null,
         })
       }}
       className="space-y-4"
@@ -76,6 +80,7 @@ function GoalForm({
         <Label>Acompanhar</Label>
         <Select value={playlistId} onChange={(e) => setPlaylistId(Number(e.target.value))}>
           <option value={0}>Patrimônio total</option>
+          <option value={-1}>Separada (eu informo quanto guardei)</option>
           {playlists?.map((p) => (
             <option key={p.id} value={p.id}>
               {p.icon} {p.name}
@@ -83,9 +88,25 @@ function GoalForm({
           ))}
         </Select>
         <p className="mt-1.5 text-xs text-slate-400">
-          A meta enche sozinha com o valor do que você escolher aqui — nada para lançar à parte.
+          {playlistId === -1
+            ? "Não olha o patrimônio: só conta o que você disser que guardou para ela."
+            : "A meta enche sozinha com o valor do que você escolher aqui — nada para lançar à parte."}
         </p>
       </div>
+      {playlistId === -1 && (
+        <div>
+          <Label htmlFor="meta-guardado">Já guardado (R$)</Label>
+          <Input
+            id="meta-guardado"
+            type="number"
+            step="0.01"
+            min="0"
+            value={saved}
+            onChange={(e) => setSaved(e.target.value)}
+            required
+          />
+        </div>
+      )}
       <div>
         <Label>Ícone</Label>
         <IconPicker value={icon} onChange={setIcon} />
@@ -109,6 +130,7 @@ export function Goals() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Goal | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
+  const [guardando, setGuardando] = useState<Goal | undefined>()
 
   const open = (goal?: Goal) => {
     setEditing(goal)
@@ -135,8 +157,8 @@ export function Goals() {
         ) : !goals || goals.length === 0 ? (
           <Card>
             <p className="py-8 text-center text-sm text-slate-400">
-              Nenhuma meta ainda. Uma meta acompanha o patrimônio total ou um ativo/grupo e diz
-              quanto guardar por mês para chegar lá no prazo.
+              Nenhuma meta ainda. Uma meta acompanha o patrimônio total, um ativo/grupo ou só o que
+              você guardar para ela, e diz quanto guardar por mês para chegar lá no prazo.
             </p>
           </Card>
         ) : (
@@ -144,6 +166,11 @@ export function Goals() {
             {goals.map((goal) => (
               <Card key={goal.id}>
                 <div className="mb-3 flex items-center justify-end gap-1">
+                  {goal.saved_amount !== null && (
+                    <Button variant="secondary" onClick={() => setGuardando(goal)} className="mr-auto px-3 py-1.5 text-xs">
+                      <PiggyBank size={14} /> Guardar
+                    </Button>
+                  )}
                   <button
                     onClick={() => open(goal)}
                     aria-label="Editar meta"
@@ -188,6 +215,80 @@ export function Goals() {
           submitting={create.isPending || update.isPending}
         />
       </Modal>
+
+      {guardando && (
+        <GuardarModal
+          goal={guardando}
+          onClose={() => setGuardando(undefined)}
+          salvar={(saved_amount) =>
+            update.mutateAsync({ id: guardando.id, data: { saved_amount } }).then(() => setGuardando(undefined))
+          }
+        />
+      )}
     </>
+  )
+}
+
+/** Meta separada: soma (ou tira) do que já foi guardado. */
+function GuardarModal({
+  goal,
+  onClose,
+  salvar,
+}: {
+  goal: Goal
+  onClose: () => void
+  salvar: (saved: number) => Promise<unknown>
+}) {
+  const [valor, setValor] = useState("")
+  const [erro, setErro] = useState<string | null>(null)
+  const [salvando, setSalvando] = useState(false)
+  const atual = goal.saved_amount ?? 0
+
+  const aplicar = (sinal: 1 | -1) => {
+    const novo = Math.round((atual + sinal * Number(valor)) * 100) / 100
+    if (!(Number(valor) > 0)) return setErro("Digite um valor maior que zero.")
+    if (novo < 0) return setErro(`Só tem ${formatCurrency(atual)} guardado nessa meta.`)
+    setSalvando(true)
+    setErro(null)
+    salvar(novo)
+      .catch((err: Error) => setErro(err.message))
+      .finally(() => setSalvando(false))
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`${goal.icon} ${goal.name}`} error={erro}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          aplicar(1)
+        }}
+        className="space-y-4"
+      >
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Guardado até agora: <strong className="text-slate-700 dark:text-slate-200">{formatCurrency(atual)}</strong> de{" "}
+          {formatCurrency(goal.target_amount)}.
+        </p>
+        <div>
+          <Label htmlFor="meta-valor">Valor (R$)</Label>
+          <Input
+            id="meta-valor"
+            type="number"
+            step="0.01"
+            min="0.01"
+            autoFocus
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={() => aplicar(-1)} disabled={salvando}>
+            Tirar
+          </Button>
+          <Button type="submit" disabled={salvando}>
+            Guardar
+          </Button>
+        </div>
+      </form>
+    </Modal>
   )
 }

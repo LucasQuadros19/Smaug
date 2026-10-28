@@ -93,6 +93,23 @@ def test_meta_ligada_a_uma_posicao(client, make_position):
     assert goal["playlist"]["name"] == "obra"
 
 
+def test_meta_separada_nao_olha_o_patrimonio(client, make_account, make_position):
+    make_account(initial=100000)
+    obra = make_position(name="obra", opening=2500)
+    goal = client.post(
+        "/api/goals", json={"name": "Viagem", "target_amount": 10000, "saved_amount": 0, "playlist_id": obra.id}
+    ).get_json()
+    assert (goal["current"], goal["done"], goal["playlist_id"]) == (0, False, None)
+
+    goal = client.put(f"/api/goals/{goal['id']}", json={"saved_amount": 1500}).get_json()
+    assert (goal["current"], goal["progress"]) == (1500, 0.15)
+
+    assert client.put(f"/api/goals/{goal['id']}", json={"saved_amount": -1}).status_code == 400
+    # Voltar a acompanhar o patrimônio.
+    goal = client.put(f"/api/goals/{goal['id']}", json={"saved_amount": None}).get_json()
+    assert goal["current"] == 102500 and goal["saved_amount"] is None
+
+
 def test_avisos_recorrente_manual_vencida(db, make_account, summary):
     conta = make_account()
     db.session.add(

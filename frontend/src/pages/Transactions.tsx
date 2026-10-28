@@ -13,6 +13,7 @@ import { WealthOverview } from "../components/dashboard/WealthOverview"
 import { useTransactions, useTransactionMutations } from "../hooks/useTransactions"
 import { useDashboardSummary } from "../hooks/useDashboard"
 import { useFormSubmit } from "../hooks/useFormSubmit"
+import { useSettings } from "../hooks/useMe"
 import { currentMonth, formatCurrency } from "../lib/format"
 import type { Transaction } from "../types"
 import type { TransactionFilters as Filters, TransactionInput } from "../api/transactions"
@@ -33,6 +34,7 @@ export function Transactions() {
   const transactions = result?.items ?? []
   const { create, update, remove } = useTransactionMutations()
   const ask = useConfirm()
+  const { settings } = useSettings()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | undefined>()
   const { submit, error, reset } = useFormSubmit(() => setModalOpen(false))
@@ -91,7 +93,7 @@ export function Transactions() {
           <>
             <TransactionsSummary transactions={transactions} totals={result?.totals} />
 
-            {result && result.by_category.length > 0 && (
+            {settings.show_category_breakdown && result && result.by_category.length > 0 && (
               <CategoryBreakdownPanel
                 items={result.by_category}
                 selectedId={filters.category_id}

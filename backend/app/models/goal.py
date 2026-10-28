@@ -5,8 +5,8 @@ from app.tenancy import Owned
 
 
 class Goal(Owned, db.Model):
-    """Uma meta: chegar a X reais. Ligada a uma posição (ativo/grupo) ou, sem
-    posição, ao patrimônio total."""
+    """Uma meta: chegar a X reais. Ligada a uma posição (ativo/grupo), ao
+    patrimônio total, ou separada: a pessoa informa quanto já guardou (`saved_amount`)."""
 
     __tablename__ = "goals"
 
@@ -16,6 +16,8 @@ class Goal(Owned, db.Model):
     target_amount = db.Column(db.Numeric(12, 2), nullable=False)
     deadline = db.Column(db.Date, nullable=True)
     playlist_id = db.Column(db.Integer, db.ForeignKey("playlists.id", ondelete="SET NULL"), nullable=True)
+    # Preenchido = meta separada, que não olha o patrimônio nem posição nenhuma.
+    saved_amount = db.Column(db.Numeric(12, 2), nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow)
 
     playlist = db.relationship("Playlist")
@@ -39,6 +41,7 @@ class Goal(Owned, db.Model):
             "target_amount": target,
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "playlist_id": self.playlist_id,
+            "saved_amount": float(self.saved_amount) if self.saved_amount is not None else None,
             "playlist": (
                 {"id": self.playlist.id, "name": self.playlist.name, "icon": self.playlist.icon, "kind": self.playlist.kind}
                 if self.playlist

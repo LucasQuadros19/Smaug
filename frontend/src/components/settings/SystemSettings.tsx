@@ -70,3 +70,30 @@ export function SystemSettings() {
     </Card>
   )
 }
+
+/** Blocos que dá para tirar das telas. */
+export function ScreenSettings() {
+  const { settings, set } = useSettings()
+  return (
+    <Card className="max-w-2xl space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">O que aparece nas telas</h3>
+        <p className="mt-1 text-xs text-slate-400">Desligado só esconde o bloco: os dados continuam lá.</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Toggle
+          label="Metas no Dashboard"
+          hint="O andamento de cada meta, embaixo do patrimônio."
+          checked={settings.show_goals}
+          onChange={(show_goals) => set({ show_goals })}
+        />
+        <Toggle
+          label="Gastos por categoria no Caixa"
+          hint="A lista de quanto foi para cada categoria, acima dos lançamentos."
+          checked={settings.show_category_breakdown}
+          onChange={(show_category_breakdown) => set({ show_category_breakdown })}
+        />
+      </div>
+    </Card>
+  )
+}

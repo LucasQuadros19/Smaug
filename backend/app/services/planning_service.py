@@ -24,10 +24,15 @@ def _dm(d: date) -> str:
 
 
 def goals_with_progress(net_worth: float, playlists_summary: list) -> list:
-    """Meta ligada a uma posição acompanha o valor dela; sem posição, o patrimônio."""
+    """Meta ligada a uma posição acompanha o valor dela; separada, o que foi informado; senão, o patrimônio."""
     values = {p["id"]: max(p["outstanding"] or 0, 0) for p in playlists_summary}
     goals = Goal.query.options(selectinload(Goal.playlist)).order_by(Goal.deadline.is_(None), Goal.deadline, Goal.id).all()
-    return [g.to_dict(current=values.get(g.playlist_id, 0) if g.playlist_id else net_worth) for g in goals]
+    def current(goal):
+        if goal.saved_amount is not None:
+            return float(goal.saved_amount)
+        return values.get(goal.playlist_id, 0) if goal.playlist_id else net_worth
+
+    return [g.to_dict(current=current(g)) for g in goals]
 
 
 def get_alerts(summary: dict, include_budgets: bool) -> list:

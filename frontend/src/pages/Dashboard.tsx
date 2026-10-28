@@ -16,6 +16,7 @@ import { UpcomingExpectations } from "../components/dashboard/UpcomingExpectatio
 import { AlertsPanel } from "../components/dashboard/AlertsPanel"
 import { GoalsOverview } from "../components/dashboard/GoalsOverview"
 import { useDashboard } from "../hooks/useDashboard"
+import { useSettings } from "../hooks/useMe"
 import { currentMonth } from "../lib/format"
 import { sumLiabilities } from "../lib/asset"
 import type { Granularity } from "../types"
@@ -24,6 +25,7 @@ export function Dashboard() {
   const [month, setMonth] = useState(currentMonth())
   const [granularity, setGranularity] = useState<Granularity>("monthly")
   const { data, isLoading } = useDashboard(month, granularity)
+  const { settings } = useSettings()
 
   return (
     <>
@@ -48,7 +50,7 @@ export function Dashboard() {
 
             <WealthOverview summary={data} />
 
-            <GoalsOverview goals={data.goals} />
+            {settings.show_goals && <GoalsOverview goals={data.goals} />}
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
               <CashflowChart
