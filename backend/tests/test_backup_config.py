@@ -110,9 +110,9 @@ def test_enviar_agora_manda_os_dois_e_mostra_o_resultado(dono, app_limpo, tmp_pa
     assert len(mandados) == 2
     (com_banco, anexos_banco, _), (sem_banco, anexos_planilha, avisos) = mandados
     assert com_banco["BACKUP_EMAIL"] == "eu@gmail.com" and com_banco["BACKUP_SENHA"] == "senha-dos-anexos-123"
-    assert anexos_banco[0] == sql and anexos_banco[1].endswith(".zip")
+    assert anexos_banco[0] == sql and anexos_banco[1].endswith(".xlsx")
     assert sem_banco["BACKUP_EMAIL"] == "socio@gmail.com"
-    assert len(anexos_planilha) == 1 and anexos_planilha[0].endswith(".zip") and avisos == []
+    assert len(anexos_planilha) == 1 and anexos_planilha[0].endswith(".xlsx") and avisos == []
 
     tela = dono.get("/api/backup").get_json()
     assert tela["envio_pedido_em"] is None

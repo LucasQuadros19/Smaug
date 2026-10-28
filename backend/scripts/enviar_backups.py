@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Manda por e-mail, cifrada, uma cópia do backup mais recente de um sistema.
+"""Manda por e-mail, com senha, uma cópia do backup mais recente de um sistema.
 
 É a cópia fora do servidor: se a máquina estragar, o backup está no Gmail.
-Só usa a biblioteca padrão e o `openssl`. No Smaug quem chama é o worker
-(`flask backup worker`), com a configuração da tela. Solto, lê o .env do
-sistema, passado como argumento:
+Cada arquivo vai num anexo: a planilha .xlsx abre no Excel/Numbers com a senha
+(precisa do msoffcrypto-tool); os outros vão cifrados com o `openssl`. No Smaug
+quem chama é o worker (`flask backup worker`), com a configuração da tela.
+Solto, lê o .env do sistema, passado como argumento:
 
     python3 enviar_backups.py /home/lucas/fozesc/.env
 
@@ -22,8 +23,8 @@ Para não lotar a conta que envia, os e-mails do backup com mais de BACKUP_DIAS
 dias vão para a lixeira dela, menos o primeiro de cada mês, que fica para
 sempre. Se BACKUP_EMAIL for a mesma conta, a limpeza vale para tudo.
 
-Para abrir o anexo no Mac (pede a BACKUP_SENHA):
-    openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -in ARQUIVO.enc | tar xz
+Para abrir a cópia do banco no Mac (pede a BACKUP_SENHA):
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 -in ARQUIVO.sql.gz.enc -out ARQUIVO.sql.gz
 """
 
 import email
@@ -35,7 +36,6 @@ import re
 import smtplib
 import subprocess
 import sys
-import tarfile
 import time
 from datetime import datetime, timedelta
 from email.header import decode_header, make_header
@@ -43,6 +43,7 @@ from email.message import EmailMessage
 
 MAX_HORAS = 26
 MAX_ANEXO = 20 * 1024 * 1024
+TIPO_XLSX = ("application", "vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 CIFRA = ["-aes-256-cbc", "-pbkdf2", "-iter", "200000", "-md", "sha256"]
 
 
@@ -57,12 +58,11 @@ def ler_env(caminho):
 
 
 def mais_recente(pasta, sufixos):
-    achados = [
-        os.path.join(raiz, nome)
-        for raiz, _, nomes in os.walk(pasta)
-        for nome in nomes
-        if nome.endswith(sufixos)
-    ]
+    achados = []
+    for raiz, pastas, nomes in os.walk(pasta):
+        # mensal/ guarda cópias (feitas depois, com data mais nova) do que já está fora dela.
+        pastas[:] = [p for p in pastas if p != "mensal"]
+        achados += [os.path.join(raiz, nome) for nome in nomes if nome.endswith(sufixos)]
     return max(achados, key=os.path.getmtime, default=None)
 
 
@@ -98,12 +98,19 @@ def escolher(pasta, agora):
     return arquivos, problemas
 
 
-def empacotar(arquivos):
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
-        for caminho in arquivos:
-            tar.add(caminho, arcname=os.path.basename(caminho))
-    return buffer.getvalue()
+def anexo(caminho, senha):
+    """(nome, dados, tipo) de um arquivo com senha: a planilha abre no próprio Excel;
+    o resto vai cifrado com o openssl."""
+    nome = os.path.basename(caminho)
+    with open(caminho, "rb") as f:
+        if nome.endswith(".xlsx"):
+            # Importado aqui: solto, só com a cópia do banco, o script roda sem ele.
+            from msoffcrypto.format.ooxml import OOXMLFile
+
+            saida = io.BytesIO()
+            OOXMLFile(f).encrypt(senha, saida)
+            return nome, saida.getvalue(), TIPO_XLSX
+        return nome + ".enc", cifrar(f.read(), senha), ("application", "octet-stream")
 
 
 def cifrar(dados, senha):
@@ -162,8 +169,8 @@ OBRIGATORIAS = ("BACKUP_NOME", "BACKUP_EMAIL", "BACKUP_SMTP_USER", "BACKUP_SMTP_
 
 
 def enviar(config, arquivos, problemas):
-    """Manda `arquivos` num anexo cifrado para BACKUP_EMAIL e tira os antigos da
-    caixa. Devolve o assunto. Configuração faltando ou inválida: ValueError."""
+    """Manda `arquivos` para BACKUP_EMAIL, um anexo com senha para cada, e tira os
+    antigos da caixa. Devolve o assunto. Configuração faltando ou inválida: ValueError."""
     faltando = [k for k in OBRIGATORIAS if not config.get(k)]
     if faltando:
         raise ValueError(f"Faltam no .env: {', '.join(faltando)}")
@@ -175,29 +182,42 @@ def enviar(config, arquivos, problemas):
     dias = int(config.get("BACKUP_DIAS") or 30)
     problemas = list(problemas)
 
-    hoje = datetime.now().strftime("%Y-%m-%d")
-    anexo = cifrar(empacotar(arquivos), config["BACKUP_SENHA"]) if arquivos else b""
-    if len(anexo) > MAX_ANEXO:
-        problemas.append(f"anexo com {len(anexo) // 2**20} MB passa do limite do Gmail: hora de trocar por Google Drive")
-        anexo = b""
+    anexos, total = [], 0
+    for caminho in arquivos:
+        item = anexo(caminho, config["BACKUP_SENHA"])
+        if total + len(item[1]) > MAX_ANEXO:
+            problemas.append(f"{os.path.basename(caminho)} ficou de fora: passou do limite de tamanho do Gmail")
+            continue
+        total += len(item[1])
+        anexos.append((caminho, *item))
 
-    linhas = [f"{os.path.basename(c)} ({os.path.getsize(c) // 1024} KB, "
-              f"{datetime.fromtimestamp(os.path.getmtime(c)):%d/%m %H:%M})" for c in arquivos]
-    corpo = "\n".join(
-        (["PROBLEMAS:", *problemas, ""] if problemas else [])
-        + ["Arquivos:", *linhas, "", "Para abrir no Mac (pede a senha da criptografia):",
-           f"  openssl enc -d {' '.join(CIFRA)} -in backup-{nome.lower()}-{hoje}.tar.gz.enc | tar xz"]
-    )
+    linhas = [f"Backup do {nome} de {datetime.now():%d/%m/%Y}.", ""]
+    if problemas:
+        linhas += ["PROBLEMAS:", *[f"  - {p}" for p in problemas], ""]
+    cifrados = []
+    for caminho, arquivo, _, tipo in anexos:
+        feito = f"{datetime.fromtimestamp(os.path.getmtime(caminho)):%d/%m às %H:%M}"
+        if tipo == TIPO_XLSX:
+            linhas += [f"{arquivo}: a planilha com os dados de {feito}, uma aba por assunto.",
+                       "  Abre no Excel ou no Numbers com a senha do backup.", ""]
+        elif arquivo.endswith(".sql.gz.enc"):
+            linhas += [f"{arquivo}: a cópia do banco de {feito}, para restaurar o sistema. Não precisa abrir.", ""]
+            cifrados.append(arquivo)
+        else:
+            linhas += [f"{arquivo}: de {feito}.", ""]
+            cifrados.append(arquivo)
+    if cifrados:
+        linhas.append("Para abrir no Mac o que termina em .enc (pede a senha do backup):")
+        linhas += [f"  openssl enc -d {' '.join(CIFRA)} -in {a} -out {a.removesuffix('.enc')}" for a in cifrados]
 
     msg = EmailMessage()
     situacao = f"PROBLEMA ({len(problemas)})" if problemas else "OK"
     msg["Subject"] = f"Backup {nome} {datetime.now():%d/%m/%Y} — {situacao}"
     msg["From"] = config["BACKUP_SMTP_USER"]
     msg["To"] = config["BACKUP_EMAIL"]
-    msg.set_content(corpo)
-    if anexo:
-        msg.add_attachment(anexo, maintype="application", subtype="octet-stream",
-                           filename=f"backup-{nome.lower()}-{hoje}.tar.gz.enc")
+    msg.set_content("\n".join(linhas))
+    for _, arquivo, dados, tipo in anexos:
+        msg.add_attachment(dados, maintype=tipo[0], subtype=tipo[1], filename=arquivo)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=60) as smtp:
         # O Google mostra a senha de app em blocos com espaço; ela vale sem eles.

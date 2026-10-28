@@ -148,13 +148,14 @@ def grupos(destinatarios, arquivos):
 def nova_planilha(pasta):
     """A planilha do dia em `pasta`, e fora as com mais de DIAS_PLANILHA dias. Devolve o erro, se houver."""
     try:
-        gravar_planilhas(os.path.join(pasta, f"planilhas-{datetime.now():%Y%m%d-%H%M%S}.zip"))
+        gravar_planilhas(os.path.join(pasta, f"planilha-{datetime.now():%Y%m%d-%H%M%S}.xlsx"))
     except Exception as erro:  # noqa: BLE001
         return f"a planilha de hoje falhou: {erro}"
     limite = time.time() - DIAS_PLANILHA * 86400
     for nome in os.listdir(pasta):
         caminho = os.path.join(pasta, nome)
-        if nome.startswith("planilhas-") and nome.endswith(".zip") and os.path.getmtime(caminho) < limite:
+        # "planilhas-*.zip" são as de antes do Excel.
+        if nome.startswith("planilha") and nome.endswith((".xlsx", ".zip")) and os.path.getmtime(caminho) < limite:
             os.remove(caminho)
     return None
 

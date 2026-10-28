@@ -125,16 +125,22 @@ def test_planilhas_do_backup_separa_cada_usuario(entrar, app_limpo, tmp_path):
     conta = ana.post("/api/accounts", json={"name": "Carteira", "type": "cash"}).get_json()
     ana.post(
         "/api/transactions",
-        json={"account_id": conta["id"], "description": "Mercado da Ana", "amount": 50,
+        json={"account_id": conta["id"], "description": "=Mercado da Ana", "amount": 50,
               "type": "expense", "date": "2026-10-01"},
     )
     beto.post("/api/accounts", json={"name": "Banco", "type": "cash"})
 
-    destino = tmp_path / "planilhas.zip"
+    destino = tmp_path / "planilha.xlsx"
     resultado = app_limpo.test_cli_runner().invoke(args=["export", "planilhas", str(destino)])
     assert resultado.exit_code == 0, resultado.output
 
+    # O .xlsx é um zip de XMLs: uma aba por assunto e por usuário, na ordem.
     with zipfile.ZipFile(destino) as zf:
-        assert {"ana/transacoes.csv", "beto/patrimonio.csv", "beto/emprestimos.csv"} <= set(zf.namelist())
-        assert "Mercado da Ana" in zf.read("ana/transacoes.csv").decode()
-        assert "Mercado da Ana" not in zf.read("beto/transacoes.csv").decode()
+        livro = zf.read("xl/workbook.xml").decode()
+        abas = ["ana - Patrimônio", "ana - Caixa", "ana - Empréstimos",
+                "beto - Patrimônio", "beto - Caixa", "beto - Empréstimos"]
+        assert all(f'name="{aba}"' in livro for aba in abas)
+        caixa_ana, caixa_beto = zf.read("xl/worksheets/sheet2.xml").decode(), zf.read("xl/worksheets/sheet5.xml").decode()
+        assert caixa_ana.count("<row ") == 2 and caixa_beto.count("<row ") == 1
+        # Texto começando com = continua texto, nunca fórmula.
+        assert "=Mercado da Ana" in zf.read("xl/sharedStrings.xml").decode() and "<f>" not in caixa_ana

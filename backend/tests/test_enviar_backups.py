@@ -6,10 +6,11 @@ import importlib.util
 import io
 import os
 import subprocess
-import tarfile
 import time
 from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 spec = importlib.util.spec_from_file_location(
     "enviar_backups", Path(__file__).parents[1] / "scripts" / "enviar_backups.py"
@@ -50,10 +51,19 @@ def test_denuncia_backup_parado_incompleto_e_sem_planilha(tmp_path):
     assert envio.escolher(str(tmp_path / "nada"), time.time())[1] == [f"a pasta {tmp_path / 'nada'} não existe"]
 
 
-def test_anexo_cifrado_abre_com_a_senha_e_so_com_ela(tmp_path):
-    pacote = envio.empacotar([str(dump(tmp_path / "saldos-1.sql.gz"))])
-    cifrado = envio.cifrar(pacote, SENHA)
-    assert b"dump complete" not in cifrado
+def test_a_copia_mensal_nao_passa_na_frente_da_mais_nova(tmp_path):
+    novo = dump(tmp_path / "saldos-20261028-093700.sql.gz", horas_atras=1)
+    # O mensal/ recebe uma cópia logo depois: data de arquivo mais nova, mesmo conteúdo.
+    dump(tmp_path / "mensal" / "saldos-202610.sql.gz")
+
+    assert envio.mais_recente(str(tmp_path), (".sql.gz",)) == str(novo)
+
+
+def test_copia_do_banco_abre_com_a_senha_e_so_com_ela(tmp_path):
+    original = dump(tmp_path / "saldos-1.sql.gz").read_bytes()
+    nome, cifrado, tipo = envio.anexo(str(tmp_path / "saldos-1.sql.gz"), SENHA)
+    assert (nome, tipo) == ("saldos-1.sql.gz.enc", ("application", "octet-stream"))
+    assert original not in cifrado
 
     def abrir(senha):
         return subprocess.run(
@@ -61,9 +71,59 @@ def test_anexo_cifrado_abre_com_a_senha_e_so_com_ela(tmp_path):
             input=cifrado, capture_output=True,
         )
 
-    assert abrir("errada").stdout != pacote
-    with tarfile.open(fileobj=io.BytesIO(abrir(SENHA).stdout)) as tar:
-        assert tar.getnames() == ["saldos-1.sql.gz"]
+    assert abrir("errada").stdout != original
+    assert abrir(SENHA).stdout == original
+
+
+def test_planilha_vai_como_excel_que_pede_a_senha(tmp_path):
+    import msoffcrypto
+    import xlsxwriter
+
+    caminho = tmp_path / "planilha-1.xlsx"
+    with xlsxwriter.Workbook(str(caminho)) as livro:
+        livro.add_worksheet("Caixa").write_string(0, 0, "Mercado")
+
+    nome, cifrado, tipo = envio.anexo(str(caminho), SENHA)
+    assert (nome, tipo) == ("planilha-1.xlsx", envio.TIPO_XLSX)
+    arquivo = msoffcrypto.OfficeFile(io.BytesIO(cifrado))
+    assert arquivo.is_encrypted()
+    with pytest.raises(Exception):
+        arquivo.load_key(password="errada")
+        arquivo.decrypt(io.BytesIO())
+    aberto = io.BytesIO()
+    arquivo = msoffcrypto.OfficeFile(io.BytesIO(cifrado))
+    arquivo.load_key(password=SENHA)
+    arquivo.decrypt(aberto)
+    assert aberto.getvalue() == caminho.read_bytes()
+
+
+def test_cada_arquivo_vai_num_anexo(tmp_path, monkeypatch):
+    enviadas = []
+
+    class Gmail:
+        def __init__(self, *_, **__): pass
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def login(self, *_): pass
+        def send_message(self, msg): enviadas.append(msg)
+
+    monkeypatch.setattr(envio.smtplib, "SMTP_SSL", Gmail)
+    monkeypatch.setattr(envio, "limpar_antigos", lambda *_: 0)
+    sql = str(dump(tmp_path / "saldos-1.sql.gz"))
+    planilha = tmp_path / "planilha-1.xlsx"
+    import xlsxwriter
+    with xlsxwriter.Workbook(str(planilha)) as livro:
+        livro.add_worksheet("Caixa")
+
+    config = {"BACKUP_NOME": "Smaug", "BACKUP_EMAIL": "eu@x.com", "BACKUP_SMTP_USER": "envia@x.com",
+              "BACKUP_SMTP_PASS": "abcd", "BACKUP_SENHA": SENHA}
+    assunto = envio.enviar(config, [sql, str(planilha)], [])
+
+    assert assunto.startswith("Backup Smaug ") and assunto.endswith("— OK")
+    nomes = [a.get_filename() for a in enviadas[0].iter_attachments()]
+    assert nomes == ["saldos-1.sql.gz.enc", "planilha-1.xlsx"]
+    corpo = enviadas[0].get_body().get_content()
+    assert "Abre no Excel" in corpo and "-in saldos-1.sql.gz.enc -out saldos-1.sql.gz" in corpo
 
 
 def test_limpeza_guarda_os_recentes_e_o_primeiro_ok_de_cada_mes():
