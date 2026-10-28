@@ -137,10 +137,51 @@ def test_planilhas_do_backup_separa_cada_usuario(entrar, app_limpo, tmp_path):
     # O .xlsx é um zip de XMLs: uma aba por assunto e por usuário, na ordem.
     with zipfile.ZipFile(destino) as zf:
         livro = zf.read("xl/workbook.xml").decode()
-        abas = ["ana - Patrimônio", "ana - Caixa", "ana - Empréstimos",
-                "beto - Patrimônio", "beto - Caixa", "beto - Empréstimos"]
+        # O Excel corta o nome da aba em 31 letras.
+        abas = [f"{quem} - {aba}"[:31] for quem in ("ana", "beto")
+                for aba in ("Patrimônio", "Caixa", "Empréstimos", "Histórico dos empréstimos")]
         assert all(f'name="{aba}"' in livro for aba in abas)
-        caixa_ana, caixa_beto = zf.read("xl/worksheets/sheet2.xml").decode(), zf.read("xl/worksheets/sheet5.xml").decode()
+        caixa_ana, caixa_beto = zf.read("xl/worksheets/sheet2.xml").decode(), zf.read("xl/worksheets/sheet6.xml").decode()
         assert caixa_ana.count("<row ") == 2 and caixa_beto.count("<row ") == 1
         # Texto começando com = continua texto, nunca fórmula.
         assert "=Mercado da Ana" in zf.read("xl/sharedStrings.xml").decode() and "<f>" not in caixa_ana
+
+
+def test_planilha_do_backup_so_tem_emprestimos_ativos_com_o_historico(client, app, make_account, tmp_path):
+    import zipfile
+
+    from app.routes.export import gravar_planilhas
+
+    conta = make_account(initial=50_000)
+
+    def emprestar(quem):
+        return client.post("/api/loans", json={
+            "borrower": quem, "amount": 10_000, "start_date": "2026-01-10", "status": "active", "participants": [],
+        }).get_json()["id"]
+
+    ativo, quitado = emprestar("Carlos Ativo"), emprestar("Pedro Quitado")
+    client.post(f"/api/loans/{ativo}/repayments", json={"date": "2026-02-10", "account_id": conta.id, "parts": [
+        {"kind": "interest", "amount": 400, "my_share": 400}]})
+    client.post(f"/api/loans/{quitado}/repayments", json={"date": "2026-02-10", "account_id": conta.id, "parts": [
+        {"kind": "principal", "amount": 10_000, "my_share": 10_000},
+        {"kind": "interest", "amount": 400, "my_share": 400}]})
+    situacao = {loan["id"]: loan["status"] for loan in client.get("/api/loans").get_json()}
+    assert situacao == {ativo: "active", quitado: "paid"}
+
+    import re
+
+    destino = str(tmp_path / "planilha.xlsx")
+    gravar_planilhas(destino)
+    with zipfile.ZipFile(destino) as zf:
+        textos = re.findall(r"<t[^>]*>([^<]*)</t>", zf.read("xl/sharedStrings.xml").decode())
+
+        abas = {n: zf.read(f"xl/worksheets/sheet{n}.xml").decode() for n in (3, 4)}
+
+    def aba(n):
+        return abas[n].count("<row "), {textos[int(i)] for i in re.findall(r't="s"[^>]*><v>(\d+)</v>', abas[n])}
+
+    linhas, emprestimos = aba(3)
+    assert linhas == 2 and "Carlos Ativo" in emprestimos and "Pedro Quitado" not in emprestimos
+    linhas, historico = aba(4)
+    assert linhas == 3  # cabeçalho + emprestou + recebimento
+    assert {"Carlos Ativo", "Emprestou", "Recebimento"} <= historico and "Pedro Quitado" not in historico

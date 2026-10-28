@@ -33,11 +33,21 @@ def test_conta_na_evolucao_explica_por_que_nao_apaga(client, db, make_account):
     registro = Snapshot(date=date(2026, 1, 1))
     db.session.add(registro)
     db.session.flush()
-    db.session.add(SnapshotEntry(snapshot_id=registro.id, account_id=conta.id, value=0))
+    db.session.add(SnapshotEntry(snapshot_id=registro.id, account_id=conta.id, value=500))
     db.session.commit()
     resposta = client.delete(f"/api/accounts/{conta.id}")
     assert resposta.status_code == 400
     assert "registros de patrimônio" in resposta.get_json()["error"]
+
+
+def test_conta_com_saldo_zero_nos_registros_apaga(client, db, make_account):
+    conta = make_account()
+    registro = Snapshot(date=date(2026, 1, 1))
+    db.session.add(registro)
+    db.session.flush()
+    db.session.add(SnapshotEntry(snapshot_id=registro.id, account_id=conta.id, value=0))
+    db.session.commit()
+    assert client.delete(f"/api/accounts/{conta.id}").status_code == 204
 
 
 def test_categoria_em_uso_apaga_e_lancamentos_ficam(client, make_account, make_category, make_transaction):

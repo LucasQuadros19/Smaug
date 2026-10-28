@@ -14,6 +14,8 @@ class Snapshot(Owned, db.Model):
     # entra em nenhuma soma — o uso dela na planilha era inconsistente.
     inflow = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     notes = db.Column(db.String(300), nullable=True)
+    # Linha do dia gravada sozinha depois de uma mudança (ver `snapshots.record_day`).
+    auto = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     created_at = db.Column(db.DateTime, default=utcnow)
 
     entries = db.relationship(
@@ -41,6 +43,7 @@ class Snapshot(Owned, db.Model):
             "date": self.date.isoformat() if self.date else None,
             "inflow": float(self.inflow or 0),
             "notes": self.notes,
+            "auto": bool(self.auto),
             "positions": positions,
             # Só posições em outra moeda: o valor digitado (US$, BTC...).
             "native": native,

@@ -245,6 +245,8 @@ export interface Snapshot {
   date: string
   inflow: number
   notes: string | null
+  /** Linha do dia gravada sozinha depois de uma mudança. */
+  auto: boolean
   /** playlist_id (string) -> valor em reais na data do registro */
   positions: Record<string, number>
   /** Só posições em outra moeda: playlist_id -> valor na moeda dela */

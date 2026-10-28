@@ -48,7 +48,7 @@ docker compose pull && docker compose up -d
 
 O container `backup` faz um dump do banco a cada 6 horas em `backups/` e mantém os últimos 14 dias. Só conta o dump que chegou ao fim, e o primeiro de cada mês fica para sempre em `backups/mensal/`.
 
-No servidor, o container `planilhas` roda `flask backup worker`: todo dia às 16h grava `backups/planilha-*.xlsx`, com uma aba de patrimônio, caixa e empréstimos de cada usuário, e manda a cópia por e-mail. Na mão: `flask export planilhas destino.xlsx`.
+No servidor, o container `planilhas` roda `flask backup worker`: todo dia às 16h grava `backups/planilha-*.xlsx`, com abas de patrimônio, caixa, empréstimos ativos e o histórico deles, de cada usuário, e manda a cópia por e-mail. Na mão: `flask export planilhas destino.xlsx`.
 
 Cópia fora do servidor: quem recebe, quem recebe também o banco, a senha do anexo e a frequência de cada arquivo ficam em Configurações, visíveis só para quem criou a primeira conta. Lá também tem o botão "Enviar agora" e o resultado do último envio. A conta Gmail que envia fica no `.env` do servidor (`BACKUP_SMTP_USER` e `BACKUP_SMTP_PASS`); enquanto nada for salvo na tela, valem `BACKUP_EMAIL` e `BACKUP_SENHA` de lá. Cada arquivo vai num anexo: a planilha abre no Excel ou no Numbers com a senha; a cópia do banco vai cifrada, e o comando para abri-la vai no próprio e-mail.
 

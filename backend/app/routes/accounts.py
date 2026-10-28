@@ -81,9 +81,13 @@ def delete_account(account_id):
     from app.models.transaction import Transaction
     from app.models.playlist_expectation import PlaylistExpectation
     from app.models.snapshot import SnapshotEntry
+    from app.routes.snapshots import drop_today_auto
 
     account = db.get_or_404(Account, account_id)
-    if SnapshotEntry.query.filter_by(account_id=account_id).first():
+    drop_today_auto()
+    # Com saldo zero nos registros, apagar não muda o histórico.
+    entries = SnapshotEntry.query.filter_by(account_id=account_id)
+    if entries.filter(SnapshotEntry.value != 0).first():
         return jsonify(
             {"error": "Essa conta está nos registros de patrimônio — apagar mudaria o histórico. Zere o saldo dela em vez de apagar."}
         ), 400
@@ -100,6 +104,7 @@ def delete_account(account_id):
         ), 400
 
     PlaylistExpectation.query.filter_by(account_id=account_id).update({"account_id": None})
+    entries.delete()
     db.session.delete(account)
     db.session.commit()
     return "", 204

@@ -131,13 +131,15 @@ def export_loans():
     return _csv_response(_loan_rows(), "smaug-emprestimos")
 
 
-def _loan_rows():
+_ATIVOS = ("active", "late")
+
+
+def _loan_rows(only_active=False):
     """Uma linha por participante — assim o rateio fica legível na planilha."""
-    loans = (
-        Loan.query.options(selectinload(Loan.participants), selectinload(Loan.repayments))
-        .order_by(Loan.start_date.desc())
-        .all()
-    )
+    query = Loan.query.options(selectinload(Loan.participants), selectinload(Loan.repayments))
+    if only_active:
+        query = query.filter(Loan.status.in_(_ATIVOS))
+    loans = query.order_by(Loan.start_date.desc()).all()
 
     rows = [
         [
@@ -185,7 +187,51 @@ def _loan_rows():
     return rows
 
 
-_ABAS = {"Patrimônio": _snapshot_rows, "Caixa": _transaction_rows, "Empréstimos": _loan_rows}
+def _loan_history_rows():
+    """Cada passo dos empréstimos ativos: quando saiu, cada recebimento e cada adiamento."""
+    loans = (
+        Loan.query.options(selectinload(Loan.repayments), selectinload(Loan.events))
+        .filter(Loan.status.in_(_ATIVOS))
+        .order_by(Loan.start_date.desc())
+        .all()
+    )
+    rows = [["Para quem", "Data", "O que foi", "Juros", "Principal", "Multa", "Total", "Parte dos socios",
+             "Vencia", "Novo vencimento", "Obs"]]
+
+    def recebido(parts, kind):
+        return _money(sum((r.amount for r in parts if r.kind == kind), 0)) if parts else ""
+
+    for loan in loans:
+        passos = [(loan.start_date, 0, ["Emprestou", "", "", "", _money(loan.amount), "", "", "", loan.notes or ""])]
+        for event in loan.events:
+            parts = event.parts
+            o_que = "Adiamento" if event.kind == "postpone" else "Recebimento"
+            passos.append((event.date, event.id, [
+                o_que, recebido(parts, "interest"), recebido(parts, "principal"), recebido(parts, "fee"),
+                _money(sum((r.amount for r in parts), 0)) if parts else "",
+                _money(sum((r.partners_share for r in parts), 0)) if parts else "",
+                event.due_before.isoformat() if event.due_before else "",
+                event.due_after.isoformat() if event.due_after else "",
+                event.notes or "",
+            ]))
+        # Recebimentos de antes do histórico por passos não têm evento.
+        for r in loan.repayments:
+            if r.event_id is None:
+                passos.append((r.date, 0, [
+                    "Recebimento", *[(_money(r.amount) if r.kind == k else "") for k in ("interest", "principal", "fee")],
+                    _money(r.amount), _money(r.partners_share), "", "", r.notes or "",
+                ]))
+        for when, _, resto in sorted(passos, key=lambda p: (p[0], p[1])):
+            rows.append([loan.borrower, when.isoformat() if when else "", *resto])
+    return rows
+
+
+_ABAS = {
+    "Patrimônio": _snapshot_rows,
+    "Caixa": _transaction_rows,
+    "Empréstimos": lambda: _loan_rows(only_active=True),
+    "Histórico dos empréstimos": _loan_history_rows,
+}
 _DATA = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
@@ -231,7 +277,7 @@ def gravar_planilhas(destino):
                 g.owner_id = user.id
                 for aba, linhas in _ABAS.items():
                     # O Excel aceita até 31 letras e não repete nome de aba.
-                    nome = aba if len(usuarios) == 1 else f"{user.username[:17]} - {aba}"
+                    nome = aba if len(usuarios) == 1 else f"{user.username[:17]} - {aba}"[:31]
                     if nome in usadas:
                         nome = f"{aba} {len(usadas)}"
                     usadas.add(nome)

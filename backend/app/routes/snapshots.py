@@ -214,10 +214,8 @@ def list_snapshots():
     return jsonify(paginate(query, lambda s: s.to_dict(counting)))
 
 
-@snapshots_bp.get("/current")
-def current_snapshot():
-    """A linha "Agora" da planilha: o que um registro salvo neste momento guardaria."""
-    playlists = Playlist.query.filter_by(kind="asset").all()
+def _current_entries(playlists):
+    """O que um registro salvo neste momento guardaria, sem gravar nada."""
     values = current_values(playlists)
     balances = get_balances_by_account()
     entries = []
@@ -230,6 +228,49 @@ def current_snapshot():
         SnapshotEntry(account_id=a.id, value=a.initial_balance + balances.get(a.id, 0))
         for a in Account.query.all()
     ]
+    return entries
+
+
+def _values(entries, ignore=()):
+    return {
+        ("p", e.playlist_id) if e.playlist_id is not None else ("a", e.account_id): Decimal(e.value).quantize(Decimal("0.01"))
+        for e in entries
+        if e.playlist_id not in ignore
+    }
+
+
+def record_day():
+    """Depois de uma mudança: se os valores de agora diferem da última linha, a
+    linha automática de hoje passa a ser a de agora. Uma por dia; as feitas à mão
+    não mudam. Cotação (Mercado, moeda de fora) varia sozinha e não conta como mudança."""
+    playlists = Playlist.query.filter_by(kind="asset").all()
+    entries = _current_entries(playlists)
+    quoted = {p.id for p in playlists if p.auto_source == "market" or p.currency != "BRL"}
+    last = Snapshot.query.options(selectinload(Snapshot.entries)).order_by(Snapshot.date.desc(), Snapshot.id.desc()).first()
+    now, before = _values(entries, quoted), _values(last.entries if last else [], quoted)
+    # Só o que existe hoje: linha antiga com grupo ou conta apagada não é mudança.
+    if all(value == before.get(key, 0) for key, value in now.items()):
+        return
+    today = date_cls.today()
+    # Apaga e cria em vez de editar: a linha de agora fica por cima das do dia.
+    for old in Snapshot.query.filter_by(date=today, auto=True):
+        db.session.delete(old)
+    db.session.add(Snapshot(date=today, inflow=0, auto=True, entries=entries))
+    db.session.commit()
+
+
+def drop_today_auto():
+    """Antes de apagar conta ou posição: a linha automática de hoje ainda não é
+    histórico — depois da exclusão ela é refeita, já sem o item."""
+    for old in Snapshot.query.filter_by(date=date_cls.today(), auto=True):
+        db.session.delete(old)
+    db.session.flush()
+
+
+@snapshots_bp.get("/current")
+def current_snapshot():
+    """A linha "Agora" da planilha: o que um registro salvo neste momento guardaria."""
+    entries = _current_entries(Playlist.query.filter_by(kind="asset").all())
     # Fora da sessão: só monta a linha, não grava nada.
     return jsonify(Snapshot(date=date_cls.today(), inflow=0, entries=entries).to_dict(counting_ids()))
 

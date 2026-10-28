@@ -226,8 +226,10 @@ def update_playlist(playlist_id):
 @playlists_bp.delete("/<int:playlist_id>")
 def delete_playlist(playlist_id):
     from app.models.snapshot import SnapshotEntry
+    from app.routes.snapshots import drop_today_auto
 
     playlist = db.get_or_404(Playlist, playlist_id)
+    drop_today_auto()
     if playlist.auto_source == "market":
         from app.models.market import MarketSymbol
 

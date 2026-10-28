@@ -245,7 +245,7 @@ export function NetWorthTable() {
                       {formatCurrency(snapshot.net_worth)}
                     </td>
                     <td className="max-w-[220px] truncate px-4 py-2.5 text-xs text-slate-400" title={snapshot.notes ?? ""}>
-                      {snapshot.notes}
+                      {snapshot.notes ?? (snapshot.auto && <span className="italic">automático</span>)}
                     </td>
                     <td className="px-4 py-2.5">
                       <button

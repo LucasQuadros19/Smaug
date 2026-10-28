@@ -1,11 +1,15 @@
 from decimal import InvalidOperation
 
-from flask import Flask, abort, request, send_from_directory
+from flask import Flask, abort, g, request, send_from_directory
 from sqlalchemy.exc import DataError, IntegrityError
 from werkzeug.exceptions import HTTPException, NotFound
 
 from app.config import Config
 from app.extensions import db, migrate
+
+
+# Escrita aqui não mexe em valor (ou, nos registros, já grava a própria linha).
+_NO_DAY_ROW = {"auth", "shares", "backup", "snapshots", "bot"}
 
 
 def create_app(config_overrides=None):
@@ -73,6 +77,24 @@ def create_app(config_overrides=None):
         if request.method in ("POST", "PUT", "PATCH") and not request.is_json:
             return {"error": "Envie os dados como JSON"}, 415
         return None
+
+    @app.after_request
+    def day_row(response):
+        # Mudou algo que mexe em valor? A Evolução ganha (ou atualiza) a linha de hoje.
+        if (
+            request.method in ("POST", "PUT", "PATCH", "DELETE")
+            and response.status_code < 400
+            and g.get("owner_id")
+            and request.blueprint not in _NO_DAY_ROW
+        ):
+            from app.routes.snapshots import record_day
+
+            try:
+                record_day()
+            except Exception:  # noqa: BLE001 - a mudança já foi salva; a linha do dia não pode derrubar a resposta
+                db.session.rollback()
+                app.logger.exception("Não deu para gravar a linha do dia na Evolução")
+        return response
 
     @app.after_request
     def security_headers(response):
