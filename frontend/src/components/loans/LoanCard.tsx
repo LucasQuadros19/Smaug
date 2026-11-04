@@ -67,11 +67,6 @@ export function LoanCard({
                 atrasado há {daysLate} {daysLate === 1 ? "dia" : "dias"}
               </span>
             )}
-            {loan.interest_pending > 0 && (
-              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                {formatCurrency(loan.interest_pending)} de juros em atraso
-              </span>
-            )}
           </div>
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
             <span className="flex items-center gap-1">

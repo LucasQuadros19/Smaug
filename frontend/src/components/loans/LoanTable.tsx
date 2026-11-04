@@ -102,9 +102,6 @@ export function LoanTable({
                     ) : (
                       <>
                         <p className="font-medium text-slate-800 dark:text-slate-100">{formatCurrency(next)}</p>
-                        {loan.interest_pending > 0 && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400">{formatCurrency(loan.interest_pending)} em atraso</p>
-                        )}
                       </>
                     )}
                   </td>
