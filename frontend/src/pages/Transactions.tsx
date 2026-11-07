@@ -14,7 +14,7 @@ import { useTransactions, useTransactionMutations } from "../hooks/useTransactio
 import { useDashboardSummary } from "../hooks/useDashboard"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import { useSettings } from "../hooks/useMe"
-import { currentMonth, formatCurrency } from "../lib/format"
+import { currentMonth, formatCurrency, formatDate } from "../lib/format"
 import type { Transaction } from "../types"
 import type { TransactionFilters as Filters, TransactionInput } from "../api/transactions"
 import { useConfirm } from "../components/ui/ConfirmDialog"
@@ -32,6 +32,10 @@ export function Transactions() {
   }
 
   const transactions = result?.items ?? []
+  const period =
+    filters.start_date || filters.end_date
+      ? `de ${filters.start_date ? formatDate(filters.start_date) : "o início"} a ${filters.end_date ? formatDate(filters.end_date) : "hoje"}`
+      : "em todo o período"
   const { create, update, remove } = useTransactionMutations()
   const ask = useConfirm()
   const { settings } = useSettings()
@@ -96,6 +100,7 @@ export function Transactions() {
             {settings.show_category_breakdown && result && result.by_category.length > 0 && (
               <CategoryBreakdownPanel
                 items={result.by_category}
+                period={period}
                 selectedId={filters.category_id}
                 onSelect={(id) => changeFilters({ ...filters, category_id: id })}
               />

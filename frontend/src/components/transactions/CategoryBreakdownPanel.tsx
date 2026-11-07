@@ -5,10 +5,12 @@ import type { CategoryBreakdown } from "../../types"
 
 export function CategoryBreakdownPanel({
   items,
+  period,
   selectedId,
   onSelect,
 }: {
   items: CategoryBreakdown[]
+  period: string
   selectedId?: number
   onSelect: (categoryId: number | undefined) => void
 }) {
@@ -23,7 +25,7 @@ export function CategoryBreakdownPanel({
           Gastos por categoria
         </h3>
         <span className="text-xs text-slate-400">
-          {formatCurrency(total)} no filtro atual
+          {formatCurrency(total)} {period}
         </span>
       </div>
 

@@ -1,12 +1,24 @@
 import { Search } from "lucide-react"
 import { Input, Select } from "../ui/Input"
 import { SegmentedControl } from "../ui/SegmentedControl"
+import { MonthSwitcher } from "../ui/MonthSwitcher"
 import { useAccounts } from "../../hooks/useAccounts"
 import { useCategories } from "../../hooks/useCategories"
 import { usePlaylists } from "../../hooks/usePlaylists"
-import { isoDate } from "../../lib/format"
+import { currentMonth, isoDate } from "../../lib/format"
 import type { TransactionFilters as Filters } from "../../api/transactions"
 import type { TransactionScope } from "../../types"
+
+function monthRange(month: string) {
+  const [year, m] = month.split("-").map(Number)
+  return { start_date: `${month}-01`, end_date: isoDate(new Date(year, m, 0)) }
+}
+
+function filteredMonth(filters: Filters): string | undefined {
+  const month = filters.start_date?.slice(0, 7)
+  if (!month || filters.end_date !== monthRange(month).end_date || !filters.start_date?.endsWith("-01")) return undefined
+  return month
+}
 
 export function TransactionFilters({
   filters,
@@ -42,6 +54,9 @@ export function TransactionFilters({
     onChange({ ...filters, start_date: isoDate(start), end_date: isoDate(end) })
   }
 
+  const month = filteredMonth(filters)
+  const setMonth = (next: string) => onChange({ ...filters, ...monthRange(next) })
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -58,6 +73,17 @@ export function TransactionFilters({
           ]}
         />
         <span className="mr-1 h-5 w-px bg-slate-200 dark:bg-white/10" aria-hidden />
+        {month ? (
+          <MonthSwitcher month={month} onChange={setMonth} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setMonth(currentMonth())}
+            className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+          >
+            Mês
+          </button>
+        )}
         {[
           { label: "30 dias", days: 30 },
           { label: "90 dias", days: 90 },
