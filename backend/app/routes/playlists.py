@@ -16,7 +16,7 @@ from app.routes.shares import limited_view
 from app.services.auto_value_service import auto_value_map
 from app.services.balance_service import get_playlist_totals
 from app.services.rates import CURRENCIES
-from app.utils.parse import color, money, text
+from app.utils.parse import color, find, iso_date, money, text
 
 playlists_bp = Blueprint("playlists", __name__)
 
@@ -146,6 +146,7 @@ def create_playlist():
         icon=data.get("icon", "📁"),
         kind=kind,
         counts_in_net_worth=bool(counts),
+        as_liability=bool(data.get("as_liability")),
         opening_value=money(data.get("opening_value"), "opening_value", allow_negative=True, required=False) or 0,
         currency=currency,
         asset_type=asset_type,
@@ -188,6 +189,8 @@ def update_playlist(playlist_id):
         playlist.kind = data["kind"]
     if "counts_in_net_worth" in data:
         playlist.counts_in_net_worth = bool(data["counts_in_net_worth"])
+    if "as_liability" in data:
+        playlist.as_liability = bool(data["as_liability"])
     if "opening_value" in data:
         # Na moeda da posição. Negativo é permitido: representa um passivo (dívida).
         playlist.opening_value = (
@@ -221,6 +224,50 @@ def update_playlist(playlist_id):
 
     db.session.commit()
     return jsonify(_with_values(playlist))
+
+
+@playlists_bp.post("/<int:playlist_id>/debt")
+def adjust_debt(playlist_id):
+    """Paguei ou a dívida aumentou. Com `account_id` o dinheiro sai (ou entra) na conta;
+    sem conta, só a dívida muda — pago por fora, juros que caíram — e o Caixa fica igual."""
+    from datetime import date
+
+    from app.models.account import Account
+    from app.routes.snapshots import current_values
+
+    playlist = db.get_or_404(Playlist, playlist_id)
+    if playlist.kind != "asset" or playlist.asset_type != "debt" or playlist.auto_source:
+        return jsonify({"error": "Só dá para lançar pagamento em ativo do tipo dívida"}), 400
+    data = request.get_json(silent=True) or {}
+    direction = data.get("direction")
+    if direction not in ("pay", "increase"):
+        return jsonify({"error": "direction deve ser 'pay' ou 'increase'"}), 400
+    amount = money(data.get("amount"), "o valor")
+    when = iso_date(data.get("date"), "date", required=False) or date.today()
+    account_id = data.get("account_id") or None
+    if account_id is not None and not find(Account, account_id):
+        return jsonify({"error": "Conta inválida"}), 400
+
+    if direction == "pay":
+        owed = -current_values([playlist])[playlist.id] * (playlist.rate or 1)
+        if owed <= 0:
+            return jsonify({"error": "Essa dívida já está zerada"}), 400
+        if amount > owed:
+            return jsonify({"error": f"O pagamento passa do que falta (R$ {owed:.2f})"}), 400
+
+    transaction = Transaction(
+        account_id=account_id,
+        playlist_id=playlist.id,
+        description=text(data.get("description"), "description")[:200]
+        or ("Pagamento da dívida" if direction == "pay" else "Aumento da dívida"),
+        amount=amount,
+        type="expense" if direction == "pay" else "income",
+        date=when,
+        notes=None if account_id else "Sem mexer no caixa",
+    )
+    db.session.add(transaction)
+    db.session.commit()
+    return jsonify(transaction.to_dict()), 201
 
 
 @playlists_bp.delete("/<int:playlist_id>")

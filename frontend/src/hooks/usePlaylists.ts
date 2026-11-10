@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { playlistsApi, type PlaylistInput } from "../api/playlists"
+import { playlistsApi, type DebtInput, type PlaylistInput } from "../api/playlists"
 
 export function usePlaylists() {
   // Cotação ao vivo para posições em outra moeda (o backend renova a cada minuto).
@@ -34,5 +34,14 @@ export function usePlaylistMutations() {
     onSuccess: invalidate,
   })
 
-  return { create, update, remove }
+  const adjustDebt = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: DebtInput }) => playlistsApi.adjustDebt(id, data),
+    onSuccess: () => {
+      invalidate()
+      queryClient.invalidateQueries({ queryKey: ["accounts"] })
+      queryClient.invalidateQueries({ queryKey: ["snapshots"] })
+    },
+  })
+
+  return { create, update, remove, adjustDebt }
 }

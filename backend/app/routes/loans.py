@@ -176,16 +176,32 @@ def _linked_position_id():
     return linked.id if linked else None
 
 
+def _repasse_category_id():
+    """A categoria de despesa "Repasse"; criada na primeira vez que um repasse precisar dela."""
+    from sqlalchemy import func
+
+    from app.models.category import Category
+    from app.routes.categories import next_position
+
+    category = Category.query.filter(Category.type == "expense", func.lower(Category.name) == "repasse").first()
+    if category is None:
+        category = Category(name="Repasse", type="expense", color="#0d9488", icon="🤝", position=next_position())
+        db.session.add(category)
+        db.session.flush()
+    return category.id
+
+
 def _partner_expense(repayment, loan, account_id):
     """Lançamento de saída do repasse ao sócio.
 
     Sem playlist: é dinheiro saindo de verdade da conta. Mas também não é
-    despesa sua — por isso vai sem categoria e com descrição explícita.
+    despesa sua — por isso vai na categoria "Repasse", com descrição explícita.
     """
     from app.models.transaction import Transaction
 
     return Transaction(
         account_id=account_id,
+        category_id=_repasse_category_id(),
         playlist_id=None,
         description=f"Repasse a sócios - {loan.borrower}",
         amount=repayment.partners_share,

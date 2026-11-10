@@ -7,7 +7,9 @@ from sqlalchemy.orm import joinedload
 from app.extensions import db
 from app.models.account import Account
 from app.models.category import Category
+from app.models.month_leftover import MonthLeftover
 from app.models.transaction import TRANSACTION_TYPES, Transaction
+from app.services.history_service import ANALYTICS_GRANULARITIES, get_analytics
 from app.utils.pagination import paginate
 from app.utils.parse import find, iso_date, money, text
 
@@ -184,6 +186,43 @@ def list_transactions():
         for r in rows
     ]
     return jsonify(result)
+
+
+@transactions_bp.get("/analytics")
+def analytics():
+    granularity = request.args.get("granularity", "month")
+    if granularity not in ANALYTICS_GRANULARITIES:
+        return jsonify({"error": f"granularity deve ser um de {ANALYTICS_GRANULARITIES}"}), 400
+    try:
+        reference = date.fromisoformat(request.args.get("ref") or date.today().isoformat())
+    except ValueError:
+        return jsonify({"error": "ref deve ser uma data AAAA-MM-DD"}), 400
+    if not date(1990, 1, 1) <= reference <= date(2100, 12, 31):
+        return jsonify({"error": "ref fora do intervalo"}), 400
+    return jsonify(get_analytics(reference, granularity))
+
+
+@transactions_bp.put("/leftovers/<month>")
+def set_leftover(month):
+    """A sobra do mês que você digitou. `amount` vazio apaga."""
+    try:
+        first_day = date.fromisoformat(f"{month}-01")
+    except ValueError:
+        return jsonify({"error": "Mês deve ser AAAA-MM"}), 400
+    if not date(1990, 1, 1) <= first_day <= date(2100, 12, 1):
+        return jsonify({"error": "Mês fora do intervalo"}), 400
+    amount = money((request.get_json(silent=True) or {}).get("amount"), "a sobra", allow_zero=True,
+                   allow_negative=True, required=False)
+    leftover = MonthLeftover.query.filter_by(month=first_day).first()
+    if amount is None:
+        if leftover:
+            db.session.delete(leftover)
+    elif leftover:
+        leftover.amount = amount
+    else:
+        db.session.add(MonthLeftover(month=first_day, amount=amount))
+    db.session.commit()
+    return "", 204
 
 
 @transactions_bp.post("")

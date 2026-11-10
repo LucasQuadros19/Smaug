@@ -102,6 +102,11 @@ export function PlaylistCard({
               <span>Já gastei: {formatCurrency(playlist.total_out ?? 0)}</span>
               <span>Já rendeu: {formatCurrency(playlist.total_in ?? 0)}</span>
             </>
+          ) : playlist.asset_type === "debt" ? (
+            <>
+              <span>Já pago: {formatCurrency(playlist.total_out ?? 0)}</span>
+              <span>Aumentou: {formatCurrency(playlist.total_in ?? 0)}</span>
+            </>
           ) : (
             <>
               <span>Aportado: {formatCurrency(getTotalInvested(playlist))}</span>

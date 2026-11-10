@@ -94,6 +94,8 @@ export interface Playlist {
   icon: string
   kind: PlaylistKind
   counts_in_net_worth: boolean
+  /** Marcado como passivo: na Evolução vai para a direita e soma em "Passivos". */
+  as_liability: boolean
   /** Sempre em reais (convertido pela cotação de agora). */
   opening_value: number
   /** Moeda em que você acompanha a posição. */
@@ -219,6 +221,33 @@ export interface CategoryExpense {
 }
 
 export type Granularity = "monthly" | "weekly"
+
+export type AnalyticsGranularity = "day" | "week" | "month" | "year"
+
+export interface AnalyticsPeriod {
+  /** "2026-11-10" (dia ou segunda da semana), "2026-11" (mês) ou "2026" (ano). */
+  period: string
+  start: string
+  end: string
+  income: number
+  expense: number
+  /** A sobra digitada (mês, ou soma dos meses no ano); null se não informou. */
+  informed: number | null
+  /** Gasto por categoria no período; a chave "0" é o que ficou sem categoria. */
+  categories: Record<string, { total: number; count: number }>
+}
+
+export interface Analytics {
+  granularity: AnalyticsGranularity
+  start: string
+  end: string
+  periods: AnalyticsPeriod[]
+  categories: CategoryBreakdown[]
+  /** Segunda (0) a domingo (6); a média conta só os dias que já passaram. */
+  weekdays: { weekday: number; total: number; average: number }[]
+  /** Gastos com a mesma descrição somados, do maior para o menor. */
+  top_descriptions: { description: string; total: number; count: number; icon: string }[]
+}
 
 export interface CashflowPoint {
   period: string
@@ -428,6 +457,8 @@ export interface DashboardSummary {
   granularity: Granularity
   goals: Goal[]
   alerts: Alert[]
+  /** Avisos que a pessoa escondeu no X e continuam valendo. */
+  alerts_hidden: number
   // Ausentes quando a chamada é compacta (?compact=1).
   cashflow_series?: CashflowPoint[]
   net_worth_series?: NetWorthSeries
@@ -470,6 +501,7 @@ export interface Goal {
 }
 
 export interface Alert {
+  key: string
   level: "danger" | "warning" | "info"
   title: string
   detail: string

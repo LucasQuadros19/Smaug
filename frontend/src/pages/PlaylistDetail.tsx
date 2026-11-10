@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowLeft, Pencil, Plus } from "lucide-react"
+import { ArrowLeft, HandCoins, Pencil, Plus } from "lucide-react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { Topbar } from "../components/layout/Topbar"
 import { Button } from "../components/ui/Button"
@@ -9,6 +9,7 @@ import { TransactionForm } from "../components/transactions/TransactionForm"
 import { TransactionTable } from "../components/transactions/TransactionTable"
 import { PlaylistForm } from "../components/playlists/PlaylistForm"
 import { AssetForm } from "../components/playlists/AssetForm"
+import { DebtForm } from "../components/playlists/DebtForm"
 import { ExpectationsSection } from "../components/playlists/ExpectationsSection"
 import { PositionTimeline } from "../components/playlists/PositionTimeline"
 import { ShoppingListSection } from "../components/shopping/ShoppingListSection"
@@ -36,7 +37,7 @@ export function PlaylistDetail() {
   })
   const transactions = txPage?.items
   const { create, update, remove } = useTransactionMutations()
-  const { update: updatePlaylist, remove: removePlaylist } = usePlaylistMutations()
+  const { update: updatePlaylist, remove: removePlaylist, adjustDebt } = usePlaylistMutations()
   const ask = useConfirm()
 
   const [txModalOpen, setTxModalOpen] = useState(false)
@@ -45,6 +46,9 @@ export function PlaylistDetail() {
 
   const [editPlaylistOpen, setEditPlaylistOpen] = useState(false)
   const playlistForm = useFormSubmit(() => setEditPlaylistOpen(false))
+
+  const [debtOpen, setDebtOpen] = useState(false)
+  const debtForm = useFormSubmit(() => setDebtOpen(false))
 
   if (loadingPlaylist || !playlist) {
     return (
@@ -108,15 +112,29 @@ export function PlaylistDetail() {
 
   const { outstanding, isProfit, isLiability, profit } = getAssetOutstanding(playlist)
   const declarado = isDeclaredValue(playlist)
+  const isDebt = isAsset && playlist.asset_type === "debt" && !playlist.auto_source
 
   return (
     <>
       <Topbar
         title={`${playlist.icon} ${playlist.name}`}
         action={
-          <Button onClick={openCreateTx}>
-            <Plus size={16} /> Nova entrada
-          </Button>
+          <div className="flex items-center gap-2">
+            {isDebt && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  debtForm.reset()
+                  setDebtOpen(true)
+                }}
+              >
+                <HandCoins size={16} /> Pagamento / aumento
+              </Button>
+            )}
+            <Button onClick={openCreateTx}>
+              <Plus size={16} /> Nova entrada
+            </Button>
+          </div>
         }
       />
       <main className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
@@ -164,7 +182,7 @@ export function PlaylistDetail() {
                     o que existe é quanto a coisa já custou e quanto rendeu. */}
                 <div>
                   <p className="text-xs text-slate-400">
-                    {declarado ? "Já gastei com ela" : "Aportado"}
+                    {declarado ? "Já gastei com ela" : isDebt ? "Já pago" : "Aportado"}
                   </p>
                   <p
                     className={`text-lg font-medium ${
@@ -173,9 +191,9 @@ export function PlaylistDetail() {
                         : "text-slate-700 dark:text-slate-200"
                     }`}
                   >
-                    {formatCurrency(declarado ? (playlist.total_out ?? 0) : getTotalInvested(playlist))}
+                    {formatCurrency(declarado || isDebt ? (playlist.total_out ?? 0) : getTotalInvested(playlist))}
                   </p>
-                  {!declarado && playlist.opening_value > 0 && (
+                  {!declarado && !isDebt && playlist.opening_value > 0 && (
                     <p className="text-[11px] text-slate-400">
                       inclui {formatCurrency(playlist.opening_value)} declarado
                     </p>
@@ -186,9 +204,13 @@ export function PlaylistDetail() {
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">
-                    {declarado ? "Já rendeu" : "Recebido"}
+                    {declarado ? "Já rendeu" : isDebt ? "Aumentou" : "Recebido"}
                   </p>
-                  <p className="text-lg font-medium text-emerald-600 dark:text-emerald-400">
+                  <p
+                    className={`text-lg font-medium ${
+                      isDebt ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
                     {formatCurrency(playlist.total_in ?? 0)}
                   </p>
                 </div>
@@ -241,6 +263,15 @@ export function PlaylistDetail() {
           onSubmit={handleSubmitTx}
           onCancel={() => setTxModalOpen(false)}
           submitting={create.isPending || update.isPending}
+        />
+      </Modal>
+
+      <Modal open={debtOpen} onClose={() => setDebtOpen(false)} title={`Dívida: ${playlist.name}`} error={debtForm.error}>
+        <DebtForm
+          owed={Math.max(-outstanding, 0)}
+          onSubmit={(data) => debtForm.submit(adjustDebt.mutateAsync({ id: playlist.id, data }))}
+          onCancel={() => setDebtOpen(false)}
+          submitting={adjustDebt.isPending}
         />
       </Modal>
 

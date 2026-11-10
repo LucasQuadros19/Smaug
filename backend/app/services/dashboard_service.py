@@ -1,5 +1,7 @@
 from datetime import date
 
+from flask import g
+
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -134,7 +136,12 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
         for p in playlists
     ]
 
-    asset_playlists = [p for p in playlists_summary if p["kind"] == "asset"]
+    # Passivo: dívida, ou posição declarada negativa. Fica negativo e fora de "aportado/recebido":
+    # pagar dívida não é aportar, e a dívida crescer não é receber.
+    def _liability(entry):
+        return (entry["opening_value"] or 0) < 0 or entry["asset_type"] == "debt"
+
+    asset_playlists = [p for p in playlists_summary if p["kind"] == "asset" and not _liability(p)]
     # "Aportado" inclui o que já era seu (opening_value) mais o que saiu do caixa.
     # Em ativo de valor declarado o que sai é custo (gasolina), não aporte: só o
     # valor declarado conta, senão abastecer pareceria investir na moto.
@@ -159,7 +166,7 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
     # declarada negativa é passivo (dívida) e continua negativa.
     def _parked(entry):
         raw = entry["outstanding"] or 0
-        return raw if (entry["opening_value"] or 0) < 0 else max(raw, 0)
+        return raw if _liability(entry) else max(raw, 0)
 
     parked_in_assets = sum(
         _parked(p) for p in playlists_summary if p["kind"] == "asset" and p["counts_in_net_worth"]
@@ -214,7 +221,10 @@ def get_summary(month: date, granularity: str = "monthly", compact: bool = False
         "granularity": granularity,
         "goals": goals_with_progress(net_worth, playlists_summary),
     }
-    summary["alerts"] = get_alerts(summary, include_budgets=start == date.today().replace(day=1))
+    alerts = get_alerts(summary, include_budgets=start == date.today().replace(day=1))
+    dismissed = set((g.user.dismissed_alerts or []) if g.get("user") else [])
+    summary["alerts"] = [a for a in alerts if a["key"] not in dismissed]
+    summary["alerts_hidden"] = len(alerts) - len(summary["alerts"])
 
     if not compact:
         summary["cashflow_series"] = get_cashflow_series(end, granularity)

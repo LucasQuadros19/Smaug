@@ -184,3 +184,25 @@ def summary(client):
         return response.get_json()
 
     return _get
+
+
+@pytest.fixture
+def loan_setup(client, make_account, make_position):
+    """Empréstimo de 50k dividido meio a meio, com posição espelhando."""
+    conta = make_account(initial=0)
+    posicao = make_position(name="empréstimo", opening=0, auto_source="loans")
+    response = client.post(
+        "/api/loans",
+        json={
+            "borrower": "Carlos",
+            "amount": 50_000,
+            "start_date": "2026-01-10",
+            "status": "active",
+            "participants": [
+                {"name": "Eu", "contributed": 25_000, "to_receive": 27_500, "is_me": True},
+                {"name": "Sócio", "contributed": 25_000, "to_receive": 27_500, "is_me": False},
+            ],
+        },
+    )
+    assert response.status_code == 201
+    return conta, posicao, response.get_json()["id"]

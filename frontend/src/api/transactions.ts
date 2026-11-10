@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { Transaction, TransactionPage, TransactionScope } from "../types"
+import type { Analytics, AnalyticsGranularity, Transaction, TransactionPage, TransactionScope } from "../types"
 
 export type TransactionInput = {
   description: string
@@ -33,4 +33,9 @@ export const transactionsApi = {
   update: (id: number, data: Partial<TransactionInput>) =>
     api.put<Transaction>(`/transactions/${id}`, data),
   remove: (id: number) => api.delete(`/transactions/${id}`),
+  analytics: (granularity: AnalyticsGranularity, ref: string) =>
+    api.get<Analytics>("/transactions/analytics", { params: { granularity, ref } }),
+  /** `amount` null apaga a sobra informada do mês ("2026-10"). */
+  setLeftover: (month: string, amount: number | null) =>
+    api.put<void>(`/transactions/leftovers/${month}`, { amount }),
 }

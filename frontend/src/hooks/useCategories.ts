@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { categoriesApi, type CategoryInput } from "../api/categories"
-import type { CategoryType } from "../types"
+import type { Category, CategoryType } from "../types"
 
 export function useCategories(type?: CategoryType) {
   return useQuery({
@@ -31,5 +31,21 @@ export function useCategoryMutations() {
     onSuccess: invalidate,
   })
 
-  return { create, update, remove }
+  // A lista muda na hora; cada lista em cache troca só os lugares das categorias reordenadas.
+  const reorder = useMutation({
+    mutationFn: (ids: number[]) => categoriesApi.reorder(ids),
+    onMutate: async (ids) => {
+      await queryClient.cancelQueries({ queryKey: ["categories"] })
+      const rank = new Map(ids.map((id, i) => [id, i]))
+      queryClient.setQueriesData<Category[]>({ queryKey: ["categories"] }, (list) => {
+        if (!list) return list
+        const moved = list.filter((c) => rank.has(c.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
+        let next = 0
+        return list.map((c) => (rank.has(c.id) ? moved[next++] : c))
+      })
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["categories"] }),
+  })
+
+  return { create, update, remove, reorder }
 }

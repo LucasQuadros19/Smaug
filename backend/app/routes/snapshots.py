@@ -76,7 +76,7 @@ def current_values(playlists):
         value = opening + _moved(playlist, totals)
         # Voltou mais do que foi: o lucro já está no caixa, não parado aqui.
         # Valor declarado negativo é dívida e continua negativo.
-        values[playlist.id] = value if opening < 0 else max(value, Decimal(0))
+        values[playlist.id] = value if opening < 0 or playlist.asset_type == "debt" else max(value, Decimal(0))
     return values
 
 

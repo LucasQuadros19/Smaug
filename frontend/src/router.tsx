@@ -20,6 +20,7 @@ export const router = createBrowserRouter([
   { path: "/", element: page(() => import("./pages/Dashboard").then((m) => m.Dashboard)) },
   { path: "/calendario", element: page(() => import("./pages/Calendar").then((m) => m.Calendar)) },
   { path: "/transacoes", element: page(() => import("./pages/Transactions").then((m) => m.Transactions)) },
+  { path: "/analises", element: page(() => import("./pages/Analytics").then((m) => m.Analytics)) },
   { path: "/contas", element: page(() => import("./pages/Accounts").then((m) => m.Accounts)) },
   { path: "/categorias", element: page(() => import("./pages/Categories").then((m) => m.Categories)) },
   { path: "/orcamentos", element: page(() => import("./pages/Budgets").then((m) => m.Budgets)) },

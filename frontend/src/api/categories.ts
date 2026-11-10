@@ -15,4 +15,5 @@ export const categoriesApi = {
   update: (id: number, data: Partial<CategoryInput>) =>
     api.put<Category>(`/categories/${id}`, data),
   remove: (id: number) => api.delete(`/categories/${id}`),
+  reorder: (ids: number[]) => api.put<void>("/categories/order", { ids }),
 }

@@ -8,12 +8,22 @@ export type PlaylistInput = {
   icon: string
   kind: PlaylistKind
   counts_in_net_worth: boolean
+  as_liability?: boolean
   opening_value?: number
   /** Só ativo, editando: quanto vale agora, com aportes e retornos (o backend acha o opening_value). */
   value?: number
   currency?: Currency
   auto_source?: "loans" | "market" | null
   asset_type?: AssetType
+}
+
+export type DebtInput = {
+  direction: "pay" | "increase"
+  amount: number
+  date: string
+  /** Sem conta: só a dívida muda, o Caixa fica igual. */
+  account_id: number | null
+  description?: string
 }
 
 export const playlistsApi = {
@@ -25,4 +35,5 @@ export const playlistsApi = {
   update: (id: number, data: Partial<PlaylistInput>) =>
     api.put<Playlist>(`/playlists/${id}`, data),
   remove: (id: number) => api.delete(`/playlists/${id}`),
+  adjustDebt: (id: number, data: DebtInput) => api.post(`/playlists/${id}/debt`, data),
 }

@@ -16,4 +16,6 @@ export const authApi = {
   changePassword: (current: string, next: string) => api.post<void>("/auth/password", { current, new: next }),
   updateHiddenTabs: (hidden_tabs: string[]) => api.put<User>("/auth/me", { hidden_tabs }),
   updateSettings: (settings: Partial<Settings>) => api.put<User>("/auth/me", { settings }),
+  dismissAlert: (key: string) => api.post<void>("/auth/me/dismissed-alerts", { key }),
+  restoreAlerts: () => api.put<User>("/auth/me", { dismissed_alerts: [] }),
 }

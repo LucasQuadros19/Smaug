@@ -14,6 +14,8 @@ class User(db.Model):
     hidden_tabs = db.Column(db.JSON, nullable=False, default=list)
     # Padrões de mercado que a pessoa mudou (ver `app.user_settings`).
     settings = db.Column(db.JSON, nullable=True)
+    # Chaves dos avisos do Dashboard que a pessoa escondeu (ver `planning_service.get_alerts`).
+    dismissed_alerts = db.Column(db.JSON, nullable=True)
     # Vai no cookie de login; trocar a senha soma 1 e desconecta os outros aparelhos.
     session_version = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=utcnow)

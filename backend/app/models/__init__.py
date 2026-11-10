@@ -6,6 +6,7 @@ from app.models.category import Category
 from app.models.goal import Goal
 from app.models.loan import Loan, LoanEvent, LoanParticipant
 from app.models.market import MarketSymbol, MarketTrade
+from app.models.month_leftover import MonthLeftover
 from app.models.playlist import Playlist
 from app.models.playlist_expectation import PlaylistExpectation
 from app.models.recurring import RecurringTransaction
@@ -35,6 +36,7 @@ __all__ = [
     "Sheet",
     "MarketSymbol",
     "MarketTrade",
+    "MonthLeftover",
     "User",
     "Share",
     "CalendarEvent",

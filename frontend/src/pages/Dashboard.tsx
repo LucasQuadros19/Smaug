@@ -35,7 +35,7 @@ export function Dashboard() {
           <p className="text-sm text-slate-400">Carregando...</p>
         ) : (
           <>
-            <AlertsPanel alerts={data.alerts} />
+            <AlertsPanel alerts={data.alerts} hidden={data.alerts_hidden} />
 
             <BalanceCards
               netWorth={data.net_worth}

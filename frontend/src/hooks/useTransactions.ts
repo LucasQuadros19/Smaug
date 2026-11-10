@@ -1,11 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { transactionsApi, type TransactionFilters, type TransactionInput } from "../api/transactions"
+import { toast, toastError } from "../lib/toast"
+import type { AnalyticsGranularity } from "../types"
 
 export function useTransactions(filters: TransactionFilters) {
   return useQuery({
     queryKey: ["transactions", filters],
     queryFn: () => transactionsApi.list(filters),
     placeholderData: (previous) => previous,
+  })
+}
+
+export function useAnalytics(granularity: AnalyticsGranularity, ref: string) {
+  return useQuery({
+    queryKey: ["transactions", "analytics", granularity, ref],
+    queryFn: () => transactionsApi.analytics(granularity, ref),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useSetLeftover() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ month, amount }: { month: string; amount: number | null }) =>
+      transactionsApi.setLeftover(month, amount),
+    onSuccess: (_, { amount }) => {
+      toast(amount === null ? "Sobra informada apagada" : "Sobra informada salva")
+      queryClient.invalidateQueries({ queryKey: ["transactions", "analytics"] })
+    },
+    onError: toastError,
   })
 }
 

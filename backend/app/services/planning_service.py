@@ -41,8 +41,9 @@ def get_alerts(summary: dict, include_budgets: bool) -> list:
     today = date.today()
     alerts = []
 
-    def add(level, title, detail, link):
-        alerts.append({"level": level, "title": title, "detail": detail, "link": link})
+    # A chave muda quando o aviso é outro (nova data, novo valor): esconder um não esconde o próximo.
+    def add(key, level, title, detail, link):
+        alerts.append({"key": key, "level": level, "title": title, "detail": detail, "link": link})
 
     manual_due = RecurringTransaction.query.filter(
         RecurringTransaction.active.is_(True),
@@ -54,6 +55,7 @@ def get_alerts(summary: dict, include_budgets: bool) -> list:
         late = item.due_date < today
         postponed = " (adiada)" if item.postponed_until else ""
         add(
+            f"recorrente:{item.id}:{item.due_date.isoformat()}",
             "danger" if late else "warning",
             f"Lançar {item.description}",
             f"{'Venceu' if late else 'Vence'} em {_dm(item.due_date)}{postponed} · recorrente manual",
@@ -70,9 +72,15 @@ def get_alerts(summary: dict, include_budgets: bool) -> list:
             detail = f"Venceu em {_dm(due)}" if due else "Marcado como atrasado"
             if loan.interest_pending > 0:
                 detail += f" · {_brl(float(loan.interest_pending))} de juros em atraso"
-            add("danger", f"Empréstimo de {loan.borrower} atrasado", detail, "/emprestimos")
+            add(
+                f"emprestimo-atrasado:{loan.id}:{due.isoformat() if due else 'sem-data'}",
+                "danger", f"Empréstimo de {loan.borrower} atrasado", detail, "/emprestimos",
+            )
         elif due and due <= today + timedelta(days=7):
-            add("warning", f"Empréstimo de {loan.borrower} vence em breve", f"Vence em {_dm(due)}", "/emprestimos")
+            add(
+                f"emprestimo-vence:{loan.id}:{due.isoformat()}",
+                "warning", f"Empréstimo de {loan.borrower} vence em breve", f"Vence em {_dm(due)}", "/emprestimos",
+            )
 
     overdue_expectations = (
         PlaylistExpectation.query.options(selectinload(PlaylistExpectation.playlist))
@@ -82,6 +90,7 @@ def get_alerts(summary: dict, include_budgets: bool) -> list:
     for exp in overdue_expectations:
         base = "/ativos" if exp.playlist.kind == "asset" else "/grupos"
         add(
+            f"previsto:{exp.id}:{exp.expected_date.isoformat()}",
             "warning",
             f"{exp.description} ainda não chegou",
             f"{_brl(float(exp.amount))} previsto para {_dm(exp.expected_date)} em {exp.playlist.name}",
@@ -93,16 +102,20 @@ def get_alerts(summary: dict, include_budgets: bool) -> list:
             spent, limit = budget["spent"] or 0, budget["limit_amount"]
             name = budget["category"]["name"] if budget["category"] else "categoria"
             if spent >= limit:
-                add("danger", f"Orçamento de {name} estourado", f"{_brl(spent)} de {_brl(limit)}", "/orcamentos")
+                add(f"orcamento:{budget['id']}:estourado", "danger", f"Orçamento de {name} estourado",
+                    f"{_brl(spent)} de {_brl(limit)}", "/orcamentos")
             elif spent >= 0.9 * limit:
-                add("warning", f"Orçamento de {name} quase no limite", f"{_brl(spent)} de {_brl(limit)}", "/orcamentos")
+                add(f"orcamento:{budget['id']}:limite", "warning", f"Orçamento de {name} quase no limite",
+                    f"{_brl(spent)} de {_brl(limit)}", "/orcamentos")
 
     for goal in summary["goals"]:
         if goal["overdue"]:
-            add("warning", f"Meta {goal['name']} passou do prazo", f"Faltam {_brl(goal['remaining'])}", "/metas")
+            add(f"meta:{goal['id']}:{goal['deadline']}", "warning", f"Meta {goal['name']} passou do prazo",
+                f"Faltam {_brl(goal['remaining'])}", "/metas")
 
     if summary["owed_to_partners"] > 0:
         add(
+            f"repasse:{summary['owed_to_partners']:.2f}",
             "info",
             "Repasse pendente aos sócios",
             f"{_brl(summary['owed_to_partners'])} na sua conta que não é seu",

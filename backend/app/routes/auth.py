@@ -29,6 +29,8 @@ LOCK_SECONDS = 15 * 60
 
 _USERNAME = re.compile(r"[a-z0-9._-]{3,30}")
 _TAB = re.compile(r"/[a-z-]{1,30}")
+_ALERT_KEY = re.compile(r"[a-z-]{1,30}:[0-9a-z.:-]{1,60}")
+MAX_DISMISSED = 200
 _failures_lock = threading.Lock()
 
 
@@ -185,5 +187,25 @@ def update_me():
         g.user.hidden_tabs = sorted(set(tabs))
     if "settings" in data:
         g.user.settings = {**(g.user.settings or {}), **validate_settings(data["settings"])}
+    if "dismissed_alerts" in data:
+        keys = data["dismissed_alerts"]
+        if (
+            not isinstance(keys, list)
+            or len(keys) > MAX_DISMISSED
+            or not all(isinstance(key, str) and _ALERT_KEY.fullmatch(key) for key in keys)
+        ):
+            return jsonify({"error": "Lista de avisos inválida"}), 400
+        g.user.dismissed_alerts = keys
     db.session.commit()
     return jsonify(g.user.to_dict())
+
+
+@auth_bp.post("/me/dismissed-alerts")
+def dismiss_alert():
+    key = (request.get_json(silent=True) or {}).get("key")
+    if not isinstance(key, str) or not _ALERT_KEY.fullmatch(key):
+        return jsonify({"error": "Aviso inválido"}), 400
+    keys = [k for k in (g.user.dismissed_alerts or []) if k != key]
+    g.user.dismissed_alerts = (keys + [key])[-MAX_DISMISSED:]
+    db.session.commit()
+    return "", 204

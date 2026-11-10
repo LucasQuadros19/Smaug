@@ -18,7 +18,8 @@ export function getAssetOutstanding(playlist: Playlist) {
   // Negativo tem dois significados diferentes: uma posição declarada negativa
   // é passivo (dívida); uma que ficou negativa porque voltou mais do que saiu
   // é lucro já realizado.
-  const isLiability = opening < 0
+  // Tipo dívida é passivo mesmo depois de paga (valor declarado 0): aumentar de novo fica negativo.
+  const isLiability = opening < 0 || playlist.asset_type === "debt"
   const isProfit = !isLiability && outstanding < 0
 
   return {

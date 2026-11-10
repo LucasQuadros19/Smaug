@@ -15,6 +15,7 @@ import {
   Table2,
   HandCoins,
   CalendarDays,
+  ChartColumn,
   type LucideIcon,
 } from "lucide-react"
 import type { ShareSection } from "../types"
@@ -47,6 +48,7 @@ export const navSections: {
     links: [
       { to: "/calendario", label: "Calendário", icon: CalendarDays, section: "alguma" },
       { to: "/transacoes", label: "Caixa", icon: ArrowLeftRight, section: "contas" },
+      { to: "/analises", label: "Análises", icon: ChartColumn, section: "contas" },
       { to: "/recorrentes", label: "Recorrentes", icon: Repeat, section: "contas" },
       { to: "/orcamentos", label: "Orçamentos", icon: PiggyBank, section: "contas" },
       { to: "/lista-compras", label: "Lista de compras", icon: ShoppingCart, section: "contas" },

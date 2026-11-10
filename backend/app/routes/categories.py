@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy import func
 
 from app.extensions import db
 from app.models.category import CATEGORY_TYPES, Category
@@ -13,8 +14,32 @@ def list_categories():
     query = Category.query
     if category_type:
         query = query.filter_by(type=category_type)
-    categories = query.order_by(Category.name).all()
+    categories = query.order_by(Category.position, Category.name).all()
     return jsonify([c.to_dict() for c in categories])
+
+
+def next_position():
+    """Categoria nova entra no fim da lista."""
+    return (db.session.query(func.max(Category.position)).scalar() or 0) + 1
+
+
+@categories_bp.put("/order")
+def reorder_categories():
+    ids = (request.get_json(silent=True) or {}).get("ids")
+    if (
+        not isinstance(ids, list)
+        or not 0 < len(ids) <= 500
+        or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)
+        or len(set(ids)) != len(ids)
+    ):
+        return jsonify({"error": "ids deve ser a lista das categorias na nova ordem"}), 400
+    categories = {c.id: c for c in Category.query.filter(Category.id.in_(ids))}
+    if len(categories) != len(ids):
+        return jsonify({"error": "Categoria não encontrada"}), 404
+    for position, category_id in enumerate(ids, start=1):
+        categories[category_id].position = position
+    db.session.commit()
+    return "", 204
 
 
 @categories_bp.post("")
@@ -33,6 +58,7 @@ def create_category():
         type=category_type,
         color=color(data.get("color"), "#6366f1"),
         icon=data.get("icon", "💰"),
+        position=next_position(),
     )
     db.session.add(category)
     db.session.commit()

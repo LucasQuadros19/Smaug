@@ -9,6 +9,8 @@ from sqlalchemy import case, func, or_
 
 from app.extensions import db
 from app.models.account import Account
+from app.models.category import Category
+from app.models.month_leftover import MonthLeftover
 from app.models.playlist import DECLARED_ASSET_TYPES, Playlist
 from app.models.transaction import Transaction
 from app.services.auto_value_service import auto_value_map
@@ -126,7 +128,7 @@ def _cash_until(cutoff: date, initial_total: Decimal):
     return initial_total + Decimal(net or 0)
 
 
-def _parked_value(opening, net, mode="capital"):
+def _parked_value(opening, net, mode="capital", debt=False):
     """Passivo (declarado negativo) fica negativo; ativo não desce de zero.
 
     Em ativo de valor declarado (veículo, imóvel) os lançamentos são custos e
@@ -135,7 +137,7 @@ def _parked_value(opening, net, mode="capital"):
     if mode == "declarado":
         return opening
     raw = opening + net
-    return raw if opening < 0 else max(raw, Decimal(0))
+    return raw if opening < 0 or debt else max(raw, Decimal(0))
 
 
 def get_net_worth_series(reference: date, granularity: str, playlists: list):
@@ -166,7 +168,9 @@ def get_net_worth_series(reference: date, granularity: str, playlists: list):
             if playlist.id in auto:
                 parked = auto[playlist.id]
             else:
-                parked = _parked_value(playlist.opening_brl, nets.get(playlist.id, Decimal(0)), playlist.value_mode)
+                parked = _parked_value(
+                    playlist.opening_brl, nets.get(playlist.id, Decimal(0)), playlist.value_mode, playlist.asset_type == "debt"
+                )
             parked_total += parked
             if playlist.kind == "asset":
                 point["assets"][str(playlist.id)] = float(parked)
@@ -213,3 +217,155 @@ def _net_worth_from_snapshots(counting: list) -> list:
         by_date[key]["cash"] = float(cash_total)
         by_date[key]["net_worth"] = float(cash_total + parked_total)
     return list(by_date.values())
+
+
+ANALYTICS_GRANULARITIES = ("day", "week", "month", "year")
+
+
+def _bucket(day: date, granularity: str) -> str:
+    if granularity == "day":
+        return day.isoformat()
+    if granularity == "week":
+        return (day - timedelta(days=day.weekday())).isoformat()
+    if granularity == "month":
+        return day.strftime("%Y-%m")
+    return str(day.year)
+
+
+def analytics_periods(reference: date, granularity: str):
+    """A janela da tela de Análises: os dias do mês, 13 semanas, os meses do ano ou os anos com lançamento."""
+    if granularity == "day":
+        start, end = month_bounds(reference.replace(day=1))
+        return [(d.isoformat(), d, d) for d in (start + timedelta(days=i) for i in range(end.day))]
+    if granularity == "week":
+        return build_periods(reference, "weekly", 13)
+    if granularity == "month":
+        return build_periods(date(reference.year, 12, 1), "monthly", 12)
+    last = date.today().year
+    earliest = [
+        d
+        for d in (
+            db.session.query(func.min(Transaction.date)).scalar(),
+            db.session.query(func.min(MonthLeftover.month)).scalar(),
+        )
+        if d
+    ]
+    first = max(min(earliest).year if earliest else last, last - 49)
+    return [(str(y), date(y, 1, 1), date(y, 12, 31)) for y in range(first, last + 1)]
+
+
+def get_analytics(reference: date, granularity: str):
+    """Entradas, saídas e gastos por categoria em cada período da janela, com a mesma regra do dashboard."""
+    periods = analytics_periods(reference, granularity)
+    start, end = periods[0][1], periods[-1][2]
+
+    rows = (
+        exclude_asset_moves(
+            db.session.query(
+                Transaction.date,
+                Transaction.type,
+                Transaction.category_id,
+                func.sum(Transaction.amount),
+                func.count(Transaction.id),
+            )
+        )
+        .filter(Transaction.date >= start, Transaction.date <= end)
+        .group_by(Transaction.date, Transaction.type, Transaction.category_id)
+        .all()
+    )
+
+    points = {
+        label: {
+            "period": label, "start": s.isoformat(), "end": e.isoformat(),
+            "income": 0.0, "expense": 0.0, "informed": None, "categories": {},
+        }
+        for label, s, e in periods
+    }
+    # A sobra que você digitou é por mês: aparece na visão por mês e somada na por ano.
+    if granularity in ("month", "year"):
+        for month, amount in db.session.query(MonthLeftover.month, MonthLeftover.amount).filter(
+            MonthLeftover.month >= start, MonthLeftover.month <= end
+        ):
+            point = points[_bucket(month, granularity)]
+            point["informed"] = (point["informed"] or 0.0) + float(amount)
+    by_category = {}
+    by_weekday = [0.0] * 7
+    for day, tx_type, category_id, total, count in rows:
+        value = float(total or 0)
+        point = points[_bucket(day, granularity)]
+        point[tx_type] += value
+        if tx_type != "expense":
+            continue
+        key = str(category_id or 0)
+        entry = point["categories"].setdefault(key, {"total": 0.0, "count": 0})
+        entry["total"] += value
+        entry["count"] += count
+        overall = by_category.setdefault(category_id, {"total": 0.0, "count": 0})
+        overall["total"] += value
+        overall["count"] += count
+        by_weekday[day.weekday()] += value
+
+    info = {
+        c.id: c
+        for c in db.session.query(Category.id, Category.name, Category.icon, Category.color).filter(
+            Category.id.in_([cid for cid in by_category if cid])
+        )
+    }
+    categories = sorted(
+        (
+            {
+                "category_id": cid,
+                "name": info[cid].name if cid in info else "Sem categoria",
+                "icon": info[cid].icon if cid in info else "—",
+                "color": info[cid].color if cid in info else "#64748b",
+                **totals,
+            }
+            for cid, totals in by_category.items()
+        ),
+        key=lambda c: c["total"],
+        reverse=True,
+    )
+
+    # Média por dia da semana só nos dias que já passaram: o resto do mês ainda não gastou.
+    elapsed = max((min(end, date.today()) - start).days + 1, 0)
+    occurrences = [0] * 7
+    for i in range(elapsed):
+        occurrences[(start.weekday() + i) % 7] += 1
+
+    # Lançamentos com a mesma descrição somados: "Mercado da semana" 45x diz mais que o maior gasto solto.
+    top = (
+        exclude_asset_moves(
+            db.session.query(
+                func.min(Transaction.description),
+                func.sum(Transaction.amount),
+                func.count(Transaction.id),
+                func.max(Transaction.category_id),
+            )
+        )
+        .filter(Transaction.type == "expense", Transaction.date >= start, Transaction.date <= end)
+        .group_by(func.lower(Transaction.description))
+        .order_by(func.sum(Transaction.amount).desc())
+        .limit(8)
+        .all()
+    )
+
+    return {
+        "granularity": granularity,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "periods": list(points.values()),
+        "categories": categories,
+        "weekdays": [
+            {"weekday": i, "total": by_weekday[i], "average": by_weekday[i] / occurrences[i] if occurrences[i] else 0.0}
+            for i in range(7)
+        ],
+        "top_descriptions": [
+            {
+                "description": description,
+                "total": float(total),
+                "count": count,
+                "icon": info[category_id].icon if category_id in info else "—",
+            }
+            for description, total, count, category_id in top
+        ],
+    }

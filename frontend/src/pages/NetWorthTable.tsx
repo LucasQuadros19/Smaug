@@ -16,9 +16,10 @@ import { useAccounts } from "../hooks/useAccounts"
 import { useViewing } from "../lib/viewing"
 import { useFormSubmit } from "../hooks/useFormSubmit"
 import { formatCurrency, formatDate, formatMoney } from "../lib/format"
-import type { Snapshot } from "../types"
+import type { CurrentSnapshot, Playlist, Snapshot } from "../types"
 import type { SnapshotInput } from "../api/snapshots"
 import { useConfirm } from "../components/ui/ConfirmDialog"
+import { getAssetOutstanding } from "../lib/asset"
 
 /** Zero fica apagado para a tabela não virar um muro de números. Em outra
  *  moeda mostra o valor como você digitou (US$, BTC) e os reais no hover. */
@@ -70,7 +71,16 @@ export function NetWorthTable() {
   }
 
   const positions = playlists?.filter((p) => p.kind === "asset") ?? []
+  // Passivos vão depois das contas, à direita: dívida (ou valor negativo) sempre, e o que você
+  // marcou como passivo (moto). Os totais separam os dois lados.
+  const isPassive = (p: Playlist) => p.as_liability || getAssetOutstanding(p).isLiability
+  const assetPositions = positions.filter((p) => !isPassive(p))
+  const liabilities = positions.filter(isPassive)
   const cashAccounts = accounts ?? []
+  const liabilityTotal = (row: Pick<Snapshot, "positions">) =>
+    liabilities
+      .filter((p) => p.counts_in_net_worth)
+      .reduce((sum, p) => sum + (row.positions[String(p.id)] ?? 0), 0)
 
   const handleSubmit = (data: SnapshotInput) => submit(create.mutateAsync(data))
 
@@ -85,6 +95,42 @@ export function NetWorthTable() {
       action: () => remove.mutateAsync(snapshot.id),
       done: "Registro excluído",
     })
+
+  const divider = "border-l border-slate-100 dark:border-white/5"
+
+  const positionHeader = (position: Playlist, first = false) => (
+    <th key={position.id} className={clsx("px-4 py-3 text-right font-medium", first && divider)}>
+      {position.icon} {position.name}
+      {position.currency !== "BRL" && <span className="ml-1 text-[10px] text-slate-400">{position.currency}</span>}
+    </th>
+  )
+
+  const positionCell = (row: CurrentSnapshot, position: Playlist, muted: boolean, first = false) => (
+    <td key={position.id} className={clsx("whitespace-nowrap px-4 py-2.5 text-right", first && divider)}>
+      <Money
+        value={row.positions[String(position.id)] ?? 0}
+        native={row.native?.[String(position.id)]}
+        currency={position.currency}
+        muted={muted}
+      />
+    </td>
+  )
+
+  const totalCells = (row: CurrentSnapshot) => (
+    <>
+      <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium">
+        <Money value={liabilities.length > 0 ? row.net_worth - liabilityTotal(row) : row.invested} />
+      </td>
+      {liabilities.length > 0 && (
+        <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium">
+          <Money value={liabilityTotal(row)} />
+        </td>
+      )}
+      <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold text-indigo-600 dark:text-indigo-400">
+        {formatCurrency(row.net_worth)}
+      </td>
+    </>
+  )
 
   // Os cartões mostram o agora: o último registro pode ser de semanas atrás.
   const latest = current ?? snapshots?.[0]
@@ -126,6 +172,22 @@ export function NetWorthTable() {
                 {formatCurrency(latest.net_worth)}
               </p>
             </div>
+            {liabilities.length > 0 && (
+              <>
+                <div>
+                  <p className="text-xs text-slate-400">Total em ativos</p>
+                  <p className="text-lg font-medium text-slate-700 dark:text-slate-200">
+                    {formatCurrency(latest.net_worth - liabilityTotal(latest))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400">Total em passivos</p>
+                  <p className="text-lg font-medium text-slate-700 dark:text-slate-200">
+                    {formatCurrency(liabilityTotal(latest))}
+                  </p>
+                </div>
+              </>
+            )}
             <div>
               <p className="text-xs text-slate-400">Investido</p>
               <p className="text-lg font-medium text-slate-700 dark:text-slate-200">
@@ -163,22 +225,26 @@ export function NetWorthTable() {
                   <th className="sticky left-0 z-20 bg-white px-4 py-3 font-medium dark:bg-[#12141c]">
                     Data
                   </th>
-                  {positions.map((position) => (
-                    <th key={position.id} className="px-4 py-3 text-right font-medium">
-                      {position.icon} {position.name}
-                      {position.currency !== "BRL" && (
-                        <span className="ml-1 text-[10px] text-slate-400">{position.currency}</span>
-                      )}
-                    </th>
-                  ))}
+                  {assetPositions.map((position) => positionHeader(position))}
                   {cashAccounts.map((account) => (
                     <th key={account.id} className="px-4 py-3 text-right font-medium">
                       💵 {account.name}
                     </th>
                   ))}
+                  {liabilities.map((position, i) => positionHeader(position, i === 0))}
                   <th className="px-4 py-3 text-right font-medium">Entrada</th>
-                  <th className="px-4 py-3 text-right font-medium">Investido</th>
-                  <th className="px-4 py-3 text-right font-medium">Patrimônio</th>
+                  {liabilities.length > 0 ? (
+                    <>
+                      <th className="px-4 py-3 text-right font-medium">Total em ativos</th>
+                      <th className="px-4 py-3 text-right font-medium">Total em passivos</th>
+                      <th className="px-4 py-3 text-right font-medium">Total geral</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-4 py-3 text-right font-medium">Investido</th>
+                      <th className="px-4 py-3 text-right font-medium">Patrimônio</th>
+                    </>
+                  )}
                   <th className="px-4 py-3 font-medium">Obs</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -189,27 +255,15 @@ export function NetWorthTable() {
                     <td className="sticky left-0 z-10 bg-indigo-50 px-4 py-2.5 font-semibold text-indigo-700 dark:bg-[#171a2b] dark:text-indigo-300">
                       Agora
                     </td>
-                    {positions.map((position) => (
-                      <td key={position.id} className="whitespace-nowrap px-4 py-2.5 text-right">
-                        <Money
-                          value={current.positions[String(position.id)] ?? 0}
-                          native={current.native?.[String(position.id)]}
-                          currency={position.currency}
-                        />
-                      </td>
-                    ))}
+                    {assetPositions.map((position) => positionCell(current, position, false))}
                     {cashAccounts.map((account) => (
                       <td key={account.id} className="whitespace-nowrap px-4 py-2.5 text-right">
                         <Money value={current.cash[String(account.id)] ?? 0} />
                       </td>
                     ))}
+                    {liabilities.map((position, i) => positionCell(current, position, false, i === 0))}
                     <td className="px-4 py-2.5" />
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium">
-                      <Money value={current.invested} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold text-indigo-600 dark:text-indigo-400">
-                      {formatCurrency(current.net_worth)}
-                    </td>
+                    {totalCells(current)}
                     <td className="px-4 py-2.5 text-xs text-slate-400" colSpan={2}>
                       valores de hoje nas outras telas
                     </td>
@@ -220,30 +274,17 @@ export function NetWorthTable() {
                     <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-medium text-slate-800 group-hover:bg-slate-50 dark:bg-[#12141c] dark:text-slate-100 dark:group-hover:bg-white/[0.03]">
                       {formatDate(snapshot.date)}
                     </td>
-                    {positions.map((position) => (
-                      <td key={position.id} className="whitespace-nowrap px-4 py-2.5 text-right">
-                        <Money
-                          value={snapshot.positions[String(position.id)] ?? 0}
-                          native={snapshot.native?.[String(position.id)]}
-                          currency={position.currency}
-                          muted
-                        />
-                      </td>
-                    ))}
+                    {assetPositions.map((position) => positionCell(snapshot, position, true))}
                     {cashAccounts.map((account) => (
                       <td key={account.id} className="whitespace-nowrap px-4 py-2.5 text-right">
                         <Money value={snapshot.cash[String(account.id)] ?? 0} muted />
                       </td>
                     ))}
+                    {liabilities.map((position, i) => positionCell(snapshot, position, true, i === 0))}
                     <td className="whitespace-nowrap px-4 py-2.5 text-right">
                       <Money value={snapshot.inflow} muted />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium">
-                      <Money value={snapshot.invested} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold text-indigo-600 dark:text-indigo-400">
-                      {formatCurrency(snapshot.net_worth)}
-                    </td>
+                    {totalCells(snapshot)}
                     <td className="max-w-[220px] truncate px-4 py-2.5 text-xs text-slate-400" title={snapshot.notes ?? ""}>
                       {snapshot.notes ?? (snapshot.auto && <span className="italic">automático</span>)}
                     </td>

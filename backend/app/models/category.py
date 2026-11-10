@@ -40,6 +40,8 @@ class Category(Owned, db.Model):
     type = db.Column(db.String(20), nullable=False)
     color = db.Column(db.String(20), nullable=False, default="#6366f1")
     icon = db.Column(db.String(10), nullable=False, default="💰")
+    # Ordem escolhida em Categorias; empate (as de antes da ordem) vai pelo nome.
+    position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     created_at = db.Column(db.DateTime, default=utcnow)
 
     transactions = db.relationship("Transaction", backref="category")

@@ -36,7 +36,7 @@ _CHOICES = {
     "loan_schedule": ("interest_only", "installments"),
     "theme": ("dark", "light", "system"),
     "start_page": (
-        "/", "/calendario", "/transacoes", "/recorrentes", "/orcamentos", "/lista-compras", "/patrimonio", "/ativos",
+        "/", "/calendario", "/transacoes", "/analises", "/recorrentes", "/orcamentos", "/lista-compras", "/patrimonio", "/ativos",
         "/emprestimos", "/metas", "/mercado", "/bot", "/grupos", "/contas", "/categorias", "/calculos",
     ),
 }

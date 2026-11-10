@@ -25,6 +25,8 @@ LISTAS = [
     "/api/market",
     "/api/market/portfolio/history",
     "/api/dashboard/summary?month=2026-10",
+    "/api/transactions/analytics?granularity=month&ref=2026-10-01",
+    "/api/transactions/analytics?granularity=year",
     "/api/export/transacoes.csv",
     "/api/export/patrimonio.csv",
     "/api/export/emprestimos.csv",

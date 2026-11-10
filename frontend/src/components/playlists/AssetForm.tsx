@@ -40,6 +40,7 @@ export function AssetForm({
   const [color, setColor] = useState(initial?.color ?? "#f59e0b")
   const [icon, setIcon] = useState(initial?.icon ?? "🤝")
   const [countsInNetWorth, setCountsInNetWorth] = useState(initial?.counts_in_net_worth ?? true)
+  const [asLiability, setAsLiability] = useState(initial?.as_liability ?? false)
   const [origin, setOrigin] = useState<Origin>(initial?.auto_source ?? "manual")
   const fromLoans = origin !== "manual"
   const [assetType, setAssetType] = useState<AssetType>(initial?.asset_type ?? "investment")
@@ -50,7 +51,9 @@ export function AssetForm({
   const shownValue = initial?.auto_source
     ? initial.opening_value
     : initial && Number(currentNativeValue(initial).toFixed(initial.currency === "BTC" ? 8 : 2))
-  const [amount, setAmount] = useState(shownValue && shownValue > 0 ? String(shownValue) : "")
+  // Dívida vale negativo: o campo mostra assim, senão ficava vazio e salvar zerava a dívida.
+  const initialAmount = shownValue ? String(shownValue) : ""
+  const [amount, setAmount] = useState(initialAmount)
   const [accountId, setAccountId] = useState(0)
   const [date, setDate] = useState(todayISO())
 
@@ -74,8 +77,14 @@ export function AssetForm({
           icon,
           kind: "asset",
           counts_in_net_worth: countsInNetWorth,
+          as_liability: asLiability,
           // Editando, o valor é "quanto vale agora": o backend desconta os lançamentos.
-          ...(isCreating ? { opening_value: declaring ? value : 0 } : fromLoans ? {} : { value }),
+          // Só vai se você mudou o campo: editar o nome não mexe no valor.
+          ...(isCreating
+            ? { opening_value: declaring ? value : 0 }
+            : fromLoans || amount === initialAmount
+              ? {}
+              : { value }),
           currency: fromLoans ? "BRL" : currency,
           auto_source: origin === "manual" ? null : origin,
           asset_type: assetType,
@@ -153,6 +162,15 @@ export function AssetForm({
         hint="Ligado para coisas que você recupera: empréstimo a receber, moto que pode ser vendida, investimento. Desligue se o dinheiro simplesmente foi embora."
       />
 
+      {assetType !== "debt" && (
+        <Toggle
+          checked={asLiability}
+          onChange={setAsLiability}
+          label="Mostrar como passivo na Evolução"
+          hint="Para o que não é dinheiro na mão, como uma moto: na Evolução fica à direita, em Total em passivos. Dívidas já ficam lá sozinhas."
+        />
+      )}
+
       <div>
         <Label>Origem do valor</Label>
         <SegmentedControl<Origin>
@@ -212,12 +230,31 @@ export function AssetForm({
           <Input
             type="number"
             step={currency === "BTC" ? "0.00000001" : "0.01"}
-            min="0"
+            min={assetType === "debt" || value < 0 ? undefined : "0"}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0,00"
             readOnly={fromLoans}
           />
+          {!isCreating && !fromLoans && initialAmount !== "" && (
+            amount === "0" ? (
+              <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                Ao salvar, {initial?.name} vai a zero sem nenhum lançamento no Caixa: as contas não mudam. Use quando a
+                dívida já foi paga ou o bem já saiu.{" "}
+                <button type="button" onClick={() => setAmount(initialAmount)} className="font-medium underline">
+                  Desfazer
+                </button>
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAmount("0")}
+                className="mt-1.5 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+              >
+                Zerar (já foi pago ou vendido, sem mexer no Caixa)
+              </button>
+            )
+          )}
           {foreign && !fromLoans && (
             <p className="mt-1 text-xs text-slate-400">
               {rate

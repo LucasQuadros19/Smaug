@@ -44,6 +44,8 @@ class Playlist(Owned, db.Model):
     icon = db.Column(db.String(10), nullable=False, default="📁")
     kind = db.Column(db.String(20), nullable=False, default="group")
     counts_in_net_worth = db.Column(db.Boolean, nullable=False, default=True)
+    # Marcado por você (moto, dívida): na Evolução vai para a direita e soma em "Passivos".
+    as_liability = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     # Valor que você já tinha antes de começar a registrar (moto que já é sua,
     # empréstimo antigo). Conta no patrimônio sem debitar nenhuma conta.
     # Fica na moeda da posição (`currency`): 1200 numa posição em USD são
@@ -119,6 +121,7 @@ class Playlist(Owned, db.Model):
             "icon": self.icon,
             "kind": self.kind,
             "counts_in_net_worth": self.counts_in_net_worth,
+            "as_liability": self.as_liability,
             "opening_value": opening,
             "currency": self.currency or "BRL",
             "native_value": float(self.opening_value or 0),
