@@ -11,6 +11,7 @@ import { LeftoverChart, type LeftoverPoint } from "../components/analytics/Lefto
 import { CategoryPeriodChart } from "../components/analytics/CategoryPeriodChart"
 import { WeekdayChart } from "../components/analytics/WeekdayChart"
 import { useAnalytics, useSetLeftover } from "../hooks/useTransactions"
+import { useSettings } from "../hooks/useMe"
 import { formatCurrency, formatDate, formatMonthLabel, isoDate, shiftMonth, todayISO } from "../lib/format"
 import { analyticsPeriod } from "../lib/chartTheme"
 import type { Analytics as AnalyticsData, AnalyticsGranularity, CategoryBreakdown } from "../types"
@@ -22,19 +23,25 @@ const UNIT: Record<AnalyticsGranularity, [string, string]> = {
   year: ["ano", "anos"],
 }
 
+/** O ano que a tela de meses mostra: com o mês começando no dia 24, 28/12 já é do ano seguinte. */
+function shownYear(ref: string, data?: AnalyticsData) {
+  return data?.granularity === "month" ? data.periods[0].period.slice(0, 4) : ref.slice(0, 4)
+}
+
 /** Anda a janela para trás (-1) ou para frente (1): um mês de dias, 13 semanas ou um ano de meses. */
-function shiftRef(ref: string, granularity: AnalyticsGranularity, step: number) {
+function shiftRef(ref: string, granularity: AnalyticsGranularity, step: number, data?: AnalyticsData) {
   if (granularity === "day") return `${shiftMonth(ref.slice(0, 7), step)}-01`
   if (granularity === "week") {
     const [y, m, d] = ref.split("-").map(Number)
     return isoDate(new Date(y, m - 1, d + 91 * step))
   }
-  return `${Number(ref.slice(0, 4)) + step}-01-01`
+  // Meio do ano: cai no ano certo seja qual for o dia em que o mês começa.
+  return `${Number(shownYear(ref, data)) + step}-06-15`
 }
 
 function windowLabel(ref: string, granularity: AnalyticsGranularity, data?: AnalyticsData) {
   if (granularity === "day") return formatMonthLabel(ref.slice(0, 7))
-  if (granularity === "month") return ref.slice(0, 4)
+  if (granularity === "month") return shownYear(ref, data)
   if (granularity === "year") return "Todos os anos"
   return data ? `${formatDate(data.start).slice(0, 5)} a ${formatDate(data.end)}` : "13 semanas"
 }
@@ -91,7 +98,7 @@ function InformLeftover({
           .filter((p) => p.start <= today)
           .map((p) => (
             <option key={p.period} value={p.period}>
-              {analyticsPeriod(p.period, "month")}
+              {analyticsPeriod(p.period, "month", p)}
             </option>
           ))}
       </Select>
@@ -124,7 +131,9 @@ export function Analytics() {
   const [ref, setRef] = useState(todayISO())
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<number | undefined>()
-  const { data, isFetching } = useAnalytics(granularity, ref)
+  const { settings, set: setSettings } = useSettings()
+  const monthStart = settings.month_start_day ?? 1
+  const { data, isFetching } = useAnalytics(granularity, ref, monthStart)
   const today = todayISO()
 
   const changeWindow = (nextGranularity: AnalyticsGranularity, nextRef: string) => {
@@ -159,7 +168,7 @@ export function Analytics() {
         .sort((a, b) => b.total - a.total)
     : (data?.categories ?? [])
   const panelPeriod = period
-    ? `em ${analyticsPeriod(period.period, granularity).toLowerCase()}`
+    ? `em ${analyticsPeriod(period.period, granularity, period).toLowerCase()}`
     : granularity === "year"
       ? "em todos os anos"
       : `em ${windowLabel(ref, granularity, data).toLowerCase()}`
@@ -194,7 +203,7 @@ export function Analytics() {
               <button
                 type="button"
                 aria-label="Período anterior"
-                onClick={() => changeWindow(granularity, shiftRef(ref, granularity, -1))}
+                onClick={() => changeWindow(granularity, shiftRef(ref, granularity, -1, data))}
                 className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10"
               >
                 <ChevronLeft size={16} />
@@ -208,20 +217,40 @@ export function Analytics() {
                 type="button"
                 aria-label="Próximo período"
                 disabled={atEnd}
-                onClick={() => changeWindow(granularity, shiftRef(ref, granularity, 1))}
+                onClick={() => changeWindow(granularity, shiftRef(ref, granularity, 1, data))}
                 className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent dark:text-slate-400 dark:hover:bg-white/10"
               >
                 <ChevronRight size={16} />
               </button>
             )}
           </div>
+          {(granularity === "month" || granularity === "year") && (
+            <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              Meu mês começa no dia
+              <Select
+                value={monthStart}
+                onChange={(e) => {
+                  setSelectedPeriod(null)
+                  setSettings({ month_start_day: Number(e.target.value) })
+                }}
+                className="w-auto! py-1.5!"
+                title="Recebe no dia 24 e conta como dinheiro do mês seguinte? Escolha 24: dezembro vai de 24/11 a 23/12."
+              >
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
           {period && (
             <button
               type="button"
               onClick={() => setSelectedPeriod(null)}
               className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300"
             >
-              {analyticsPeriod(period.period, granularity)}
+              {analyticsPeriod(period.period, granularity, period)}
               <X size={14} aria-label="Tirar a seleção" />
             </button>
           )}
@@ -255,7 +284,7 @@ export function Analytics() {
                 value={peak ? formatCurrency(peak.expense) : "—"}
                 detail={
                   peak
-                    ? `${analyticsPeriod(peak.period, granularity)}${peakCategory ? ` · mais em ${peakCategory.icon} ${peakCategory.name}` : ""}`
+                    ? `${analyticsPeriod(peak.period, granularity, peak)}${peakCategory ? ` · mais em ${peakCategory.icon} ${peakCategory.name}` : ""}`
                     : "Sem gastos"
                 }
               />
@@ -340,7 +369,7 @@ export function Analytics() {
                       <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                         {points.map((p) => (
                           <tr key={p.period} className="text-slate-700 dark:text-slate-200">
-                            <td className="py-1.5 pr-3">{analyticsPeriod(p.period, granularity)}</td>
+                            <td className="py-1.5 pr-3">{analyticsPeriod(p.period, granularity, p)}</td>
                             <td className="py-1.5 text-right">{formatCurrency(p.income)}</td>
                             <td className="py-1.5 text-right">{formatCurrency(p.expense)}</td>
                             <td className={clsx("py-1.5 text-right", p.leftover < 0 && "text-rose-600 dark:text-rose-400")}>

@@ -11,10 +11,10 @@ export function useTransactions(filters: TransactionFilters) {
   })
 }
 
-export function useAnalytics(granularity: AnalyticsGranularity, ref: string) {
+export function useAnalytics(granularity: AnalyticsGranularity, ref: string, monthStart: number) {
   return useQuery({
-    queryKey: ["transactions", "analytics", granularity, ref],
-    queryFn: () => transactionsApi.analytics(granularity, ref),
+    queryKey: ["transactions", "analytics", granularity, ref, monthStart],
+    queryFn: () => transactionsApi.analytics(granularity, ref, monthStart),
     placeholderData: (previous) => previous,
   })
 }

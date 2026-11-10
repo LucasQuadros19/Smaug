@@ -222,26 +222,42 @@ def _net_worth_from_snapshots(counting: list) -> list:
 ANALYTICS_GRANULARITIES = ("day", "week", "month", "year")
 
 
-def _bucket(day: date, granularity: str) -> str:
+def _financial_month(day: date, start_day: int) -> date:
+    """O mês (dia 1) a que `day` pertence quando o seu mês começa no dia `start_day`:
+    com 24, o salário de 24/11 já é de dezembro."""
+    first = day.replace(day=1)
+    return shift_month(first, 1) if start_day > 1 and day.day >= start_day else first
+
+
+def _financial_bounds(month: date, start_day: int):
+    """De quando a quando vai o mês `month` (dia 1): com 24, dezembro vai de 24/11 a 23/12."""
+    if start_day == 1:
+        return month_bounds(month)
+    return shift_month(month, -1).replace(day=start_day), month.replace(day=start_day) - timedelta(days=1)
+
+
+def _bucket(day: date, granularity: str, start_day: int = 1) -> str:
     if granularity == "day":
         return day.isoformat()
     if granularity == "week":
         return (day - timedelta(days=day.weekday())).isoformat()
     if granularity == "month":
-        return day.strftime("%Y-%m")
-    return str(day.year)
+        return _financial_month(day, start_day).strftime("%Y-%m")
+    return str(_financial_month(day, start_day).year)
 
 
-def analytics_periods(reference: date, granularity: str):
-    """A janela da tela de Análises: os dias do mês, 13 semanas, os meses do ano ou os anos com lançamento."""
+def analytics_periods(reference: date, granularity: str, start_day: int = 1):
+    """A janela da tela de Análises: os dias do mês, 13 semanas, os meses do ano ou os anos com lançamento.
+    Mês e ano seguem o dia em que o seu mês começa (`start_day`)."""
     if granularity == "day":
         start, end = month_bounds(reference.replace(day=1))
         return [(d.isoformat(), d, d) for d in (start + timedelta(days=i) for i in range(end.day))]
     if granularity == "week":
         return build_periods(reference, "weekly", 13)
     if granularity == "month":
-        return build_periods(date(reference.year, 12, 1), "monthly", 12)
-    last = date.today().year
+        year = _financial_month(reference, start_day).year
+        return [(f"{year}-{m:02d}", *_financial_bounds(date(year, m, 1), start_day)) for m in range(1, 13)]
+    last = _financial_month(date.today(), start_day).year
     earliest = [
         d
         for d in (
@@ -250,13 +266,16 @@ def analytics_periods(reference: date, granularity: str):
         )
         if d
     ]
-    first = max(min(earliest).year if earliest else last, last - 49)
-    return [(str(y), date(y, 1, 1), date(y, 12, 31)) for y in range(first, last + 1)]
+    first = max(_financial_month(min(earliest), start_day).year if earliest else last, last - 49)
+    return [
+        (str(y), _financial_bounds(date(y, 1, 1), start_day)[0], _financial_bounds(date(y, 12, 1), start_day)[1])
+        for y in range(first, last + 1)
+    ]
 
 
-def get_analytics(reference: date, granularity: str):
+def get_analytics(reference: date, granularity: str, start_day: int = 1):
     """Entradas, saídas e gastos por categoria em cada período da janela, com a mesma regra do dashboard."""
-    periods = analytics_periods(reference, granularity)
+    periods = analytics_periods(reference, granularity, start_day)
     start, end = periods[0][1], periods[-1][2]
 
     rows = (
@@ -286,13 +305,13 @@ def get_analytics(reference: date, granularity: str):
         for month, amount in db.session.query(MonthLeftover.month, MonthLeftover.amount).filter(
             MonthLeftover.month >= start, MonthLeftover.month <= end
         ):
-            point = points[_bucket(month, granularity)]
+            point = points[_bucket(month, granularity, start_day)]
             point["informed"] = (point["informed"] or 0.0) + float(amount)
     by_category = {}
     by_weekday = [0.0] * 7
     for day, tx_type, category_id, total, count in rows:
         value = float(total or 0)
-        point = points[_bucket(day, granularity)]
+        point = points[_bucket(day, granularity, start_day)]
         point[tx_type] += value
         if tx_type != "expense":
             continue

@@ -148,3 +148,34 @@ def test_sobra_informada_e_de_cada_conta(entrar):
     assert bia.put("/api/transactions/leftovers/2025-03", json={"amount": 10}).status_code == 204
     assert analises(ana, granularity="month", ref="2025-01-01")["periods"][2]["informed"] == 650
     assert analises(bia, granularity="month", ref="2025-01-01")["periods"][2]["informed"] == 10
+
+
+def test_mes_que_comeca_no_dia_24(client, make_account, make_transaction):
+    conta = make_account()
+    make_transaction(conta, 5000, "income", when=date(2026, 11, 24))
+    make_transaction(conta, 1000, "income", when=date(2026, 12, 5))
+    make_transaction(conta, 300, when=date(2026, 11, 23))
+    make_transaction(conta, 700, when=date(2026, 12, 23))
+    make_transaction(conta, 90, when=date(2026, 12, 24))
+    assert client.put("/api/auth/me", json={"settings": {"month_start_day": 24}}).status_code == 200
+    client.put("/api/transactions/leftovers/2026-12", json={"amount": 5300})
+
+    meses = {p["period"]: p for p in analises(client, granularity="month", ref="2026-12-10")["periods"]}
+    dezembro = meses["2026-12"]
+    assert (dezembro["start"], dezembro["end"]) == ("2026-11-24", "2026-12-23")
+    assert (dezembro["income"], dezembro["expense"], dezembro["informed"]) == (6000, 700, 5300)
+    assert meses["2026-11"]["expense"] == 300
+    assert meses["2026-01"]["start"] == "2025-12-24"
+
+    # 24/12 em diante já é janeiro do ano seguinte.
+    janeiro = analises(client, granularity="month", ref="2026-12-28")["periods"][0]
+    assert (janeiro["period"], janeiro["expense"]) == ("2027-01", 90)
+    anos = {p["period"]: p for p in analises(client, granularity="year")["periods"]}
+    assert (anos["2026"]["start"], anos["2026"]["end"]) == ("2025-12-24", "2026-12-23")
+    assert anos["2026"]["income"] == 6000
+
+    for ruim in (0, 29, 2.5, "24"):
+        assert client.put("/api/auth/me", json={"settings": {"month_start_day": ruim}}).status_code == 400
+    # A tela manda o dia no pedido; vale ele, não o salvo.
+    assert analises(client, granularity="month", ref="2026-12-10", month_start=1)["periods"][11]["start"] == "2026-12-01"
+    assert client.get("/api/transactions/analytics?month_start=29").status_code == 400

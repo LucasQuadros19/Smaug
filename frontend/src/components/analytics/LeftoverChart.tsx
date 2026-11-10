@@ -35,7 +35,7 @@ function LeftoverTooltip({ active, payload, granularity }: any) {
   ]
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-white/10 dark:bg-[#161923]">
-      <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">{analyticsPeriod(point.period, granularity)}</p>
+      <p className="mb-1 font-medium text-slate-600 dark:text-slate-300">{analyticsPeriod(point.period, granularity, point)}</p>
       {rows.map((row) => (
         <p key={row.label} className="flex items-center justify-between gap-4 text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1.5">

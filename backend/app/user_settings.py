@@ -30,6 +30,7 @@ DEFAULTS = {
     "week_starts_monday": False,  # calendário de segunda a domingo
     "show_goals": False,  # metas no Dashboard
     "show_category_breakdown": False,  # gastos por categoria no Caixa
+    "month_start_day": 1,  # Análises: o mês vai do dia X ao dia X-1 do mês seguinte (salário no dia 24 já conta no próximo)
 }
 
 _CHOICES = {
@@ -46,6 +47,7 @@ _LIMITS = {
     "late_fine": (0, 100),
     "late_interest": (0, 100),
     "grace_days": (0, 90),
+    "month_start_day": (1, 28),
     "order_fee": (0, 100_000),
     "b3_fee": (0, 10),
     "stock_tax": (0, 100),

@@ -44,6 +44,8 @@ export interface Settings {
   /** O que aparece: metas no Dashboard e gastos por categoria no Caixa. */
   show_goals: boolean
   show_category_breakdown: boolean
+  /** Análises: o mês vai do dia X ao dia X-1 do mês seguinte. */
+  month_start_day: number
 }
 
 export type ShareSection = "contas" | "patrimonio" | "emprestimos" | "mercado" | "calculos"

@@ -1,6 +1,6 @@
 from datetime import date
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
@@ -10,6 +10,7 @@ from app.models.category import Category
 from app.models.month_leftover import MonthLeftover
 from app.models.transaction import TRANSACTION_TYPES, Transaction
 from app.services.history_service import ANALYTICS_GRANULARITIES, get_analytics
+from app.user_settings import merged as merged_settings
 from app.utils.pagination import paginate
 from app.utils.parse import find, iso_date, money, text
 
@@ -199,7 +200,11 @@ def analytics():
         return jsonify({"error": "ref deve ser uma data AAAA-MM-DD"}), 400
     if not date(1990, 1, 1) <= reference <= date(2100, 12, 31):
         return jsonify({"error": "ref fora do intervalo"}), 400
-    return jsonify(get_analytics(reference, granularity))
+    # A tela manda o dia junto: ao trocar, o pedido não chega antes de a configuração salvar.
+    start_day = request.args.get("month_start", type=int) or merged_settings(g.user.settings)["month_start_day"]
+    if not 1 <= start_day <= 28:
+        return jsonify({"error": "month_start deve ser de 1 a 28"}), 400
+    return jsonify(get_analytics(reference, granularity, start_day))
 
 
 @transactions_bp.put("/leftovers/<month>")
